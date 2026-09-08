@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; script-src 'self'; img-src 'self' data:; font-src 'self' https://fonts.gstatic.com;" />
+  <title>Prism</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div class="app">
+    <aside class="sidebar">
+      <div class="sidebar-header">
+        <div class="brand">
+          <div class="brand-mark">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M12 3.6 20.4 18.4H3.6L12 3.6Z" fill="rgba(255,255,255,0.16)" stroke="currentColor" stroke-width="1.7"/>
+              <path d="M12 3.6v14.8" stroke="rgba(255,255,255,0.5)" stroke-width="1.2"/>
+              <circle cx="12" cy="12.3" r="1.6" fill="currentColor"/>
+            </svg>
+          </div>
+          <div class="brand-name">Prism</div>
+        </div>
+        <button id="settingsBtn" class="icon-btn header-icon" type="button" title="Pengaturan">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="3"/>
+            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+          </svg>
+        </button>
+      </div>
+
+      <div class="sidebar-actions">
+        <button id="newChatBtn" class="btn btn-primary btn-block" type="button">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 20h9"/>
+            <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/>
+          </svg>
+          Percakapan baru
+        </button>
+      </div>
+
+      <div class="sidebar-search">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
+        <input id="chatSearch" placeholder="Cari percakapan" spellcheck="false" />
+      </div>
+
+      <div id="chatList" class="chat-list"></div>
+
+      <div class="sidebar-footer">
+        <div class="connection-card">
+          <div class="conn-avatar">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M4 7h4l3-3h6a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V9a2 2 0 0 1 2-2Z"/>
+              <path d="m8 13 3 3 5-5"/>
+            </svg>
+          </div>
+          <div class="conn-info">
+            <div class="conn-title" id="connTitle">Terhubung ke 9router</div>
+            <div class="conn-sub" id="connSub">Idle</div>
+          </div>
+          <span class="conn-status-dot" id="connIndicator"><span class="dot"></span></span>
+          <span id="connLabel" class="visually-hidden">Idle</span>
+        </div>
+      </div>
+    </aside>
+
+    <main class="main">
+      <header class="topbar">
+        <div class="model-picker">
+          <button class="model-trigger" id="modelTrigger" type="button">
+            <div class="model-avatar">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+                <path d="m12 3-1.9 5.8a2 2 0 0 1-1.3 1.3L3 12l5.8 1.9a2 2 0 0 1 1.3 1.3L12 21l1.9-5.8a2 2 0 0 1 1.3-1.3L21 12l-5.8-1.9a2 2 0 0 1-1.3-1.3L12 3Z"/>
+              </svg>
+            </div>
+            <div class="model-labels">
+              <div class="model-label-top">Model</div>
+              <div id="currentModel" class="model-label-name">Pilih model dulu</div>
+            </div>
+            <svg class="chev" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
+          </button>
+          <div id="modelDropdown" class="dropdown hidden">
+            <div class="dropdown-search">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
+              <input id="modelSearch" placeholder="Cari model — nama, provider, atau 'free'" autocomplete="off" spellcheck="false" />
+              <button id="refreshModels" class="icon-btn" type="button" title="Muat ulang katalog model">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-6.2-8.55"/><path d="M21 4v6h-6"/></svg>
+              </button>
+            </div>
+            <div class="dropdown-filters">
+              <button class="filter-chip active" type="button" data-filter="all">Semua <span id="countAll" class="filter-count">0</span></button>
+              <button class="filter-chip" type="button" data-filter="pinned">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="m12 2 3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2Z"/></svg>
+                Favorit <span id="countPinned" class="filter-count">0</span>
+              </button>
+              <button class="filter-chip" type="button" data-filter="free">Gratis <span id="countFree" class="filter-count">0</span></button>
+            </div>
+            <div id="modelList" class="dropdown-list"></div>
+          </div>
+        </div>
+      </header>
+
+      <section id="messages" class="messages"></section>
+
+      <footer class="composer">
+        <div class="composer-shell">
+          <textarea id="input" rows="1" placeholder="Tanyakan apa saja pada Prism..."></textarea>
+          <div class="composer-actions">
+            <div class="composer-hint">
+              <kbd>Enter</kbd> kirim <span class="sep">·</span> <kbd>Shift</kbd> + <kbd>Enter</kbd> baris baru
+            </div>
+            <button id="sendBtn" class="btn btn-primary btn-send" type="button" title="Kirim">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5"/><path d="m5 12 7-7 7 7"/></svg>
+            </button>
+          </div>
+        </div>
+      </footer>
+    </main>
+  </div>
+
+  <div id="settingsModal" class="modal hidden">
+    <div class="modal-overlay" data-close="1"></div>
+    <div class="modal-card">
+      <header class="modal-head">
+        <div>
+          <h2>Pengaturan koneksi</h2>
+          <p class="modal-sub">Arahkan Prism ke instance 9router / OpenRouter Anda dan atur perilaku default.</p>
+        </div>
+        <button class="icon-btn" id="closeSettings" type="button" aria-label="Tutup">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
+        </button>
+      </header>
+
+      <div class="modal-body">
+        <div class="settings-section">
+          <div class="settings-section-title">Endpoint</div>
+          <div class="field">
+            <label for="baseUrl">Host / Base URL</label>
+            <input id="baseUrl" type="text" placeholder="https://openrouter.ai/api/v1" spellcheck="false" />
+            <p class="field-help">Endpoint OpenAI-compatible. Contoh: <code>https://openrouter.ai/api/v1</code> (default), <code>http://localhost:8080/v1</code> (9router self-hosted), atau <code>http://localhost:11434/v1</code> (Ollama).</p>
+          </div>
+          <div class="field">
+            <label for="apiKey">API Key</label>
+            <input id="apiKey" type="password" placeholder="sk-or-v1-..." spellcheck="false" autocomplete="new-password" />
+            <p class="field-help">Disimpan terenkripsi via <code>safeStorage</code> OS. Untuk endpoint lokal tanpa autentikasi, isi apa saja (mis. <code>none</code>).</p>
+          </div>
+        </div>
+
+        <div class="settings-section">
+          <div class="settings-section-title">Perilaku model</div>
+          <div class="field-row">
+            <div class="field">
+              <label for="temperature">Temperature</label>
+              <input id="temperature" type="number" step="0.1" min="0" max="2" value="0.7" />
+              <p class="field-help">0 = deterministik, 1.5 = kreatif.</p>
+            </div>
+            <div class="field">
+              <label for="maxTokens">Max tokens</label>
+              <input id="maxTokens" type="number" min="1" placeholder="Otomatis" />
+              <p class="field-help">Kosongkan agar model tentukan.</p>
+            </div>
+          </div>
+          <div class="field">
+            <label for="systemPrompt">System prompt</label>
+            <textarea id="systemPrompt" rows="4" placeholder="Contoh: Kamu asisten yang berpikir kritis, menjawab dalam bahasa Indonesia yang ringkas, dan menyertakan contoh kode bila relevan."></textarea>
+            <p class="field-help">Kepribadian bawaan yang diterapkan di semua percakapan baru.</p>
+          </div>
+        </div>
+      </div>
+
+      <footer class="modal-foot">
+        <button class="btn btn-ghost" type="button" data-close="1">Batal</button>
+        <button id="saveSettings" class="btn btn-primary" type="button">Simpan pengaturan</button>
+      </footer>
+    </div>
+  </div>
+
+  <div id="toastRoot" class="toast-root"></div>
+
+  <script src="vendor/marked.js"></script>
+  <script src="vendor/purify.min.js"></script>
+  <script src="renderer.js"></script>
+</body>
+</html>
