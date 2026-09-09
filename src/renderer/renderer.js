@@ -27,7 +27,10 @@ const ICONS = {
   x: '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg>',
   prism: '<svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.6 20.4 18.4H3.6L12 3.6Z" fill="rgba(18,183,106,0.14)" stroke="currentColor" stroke-width="1.6"/><path d="M12 3.6v14.8" stroke="rgba(18,183,106,0.5)" stroke-width="1.2"/><circle cx="12" cy="12.3" r="1.8" fill="currentColor"/></svg>',
   starOutline: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="m12 2 3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2Z"/></svg>',
-  starFilled: '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="1" stroke-linejoin="round"><path d="m12 2 3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2Z"/></svg>'
+  starFilled: '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="1" stroke-linejoin="round"><path d="m12 2 3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2Z"/></svg>',
+  copy: '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>',
+  regen: '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-6.2-8.55"/><path d="M21 4v6h-6"/></svg>',
+  stop: '<svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>'
 };
 
 function isFreeModel(m) {
@@ -167,6 +170,41 @@ function deleteConversation(id) {
   renderMessages();
 }
 
+function renameConversation(id, newTitle) {
+  const conv = state.conversations.find(c => c.id === id);
+  if (!conv) return;
+  const trimmed = (newTitle || '').trim();
+  if (!trimmed) return;
+  conv.title = trimmed.slice(0, 80);
+  persistConversations();
+  renderChatList();
+}
+
+function startRenameInline(itemEl, conv) {
+  const titleEl = itemEl.querySelector('.title');
+  if (!titleEl) return;
+  const current = conv.title;
+  const input = document.createElement('input');
+  input.type = 'text';
+  input.className = 'rename-input';
+  input.value = current;
+  titleEl.replaceWith(input);
+  input.focus();
+  input.select();
+  const commit = () => {
+    if (input.value.trim() && input.value.trim() !== current) {
+      renameConversation(conv.id, input.value);
+    } else {
+      renderChatList();
+    }
+  };
+  input.addEventListener('blur', commit);
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') { e.preventDefault(); input.blur(); }
+    else if (e.key === 'Escape') { e.preventDefault(); renderChatList(); }
+  });
+}
+
 function groupConversations(convs) {
   const now = new Date();
   const startOfToday = new Date(now); startOfToday.setHours(0, 0, 0, 0);
@@ -228,9 +266,9 @@ function renderChatList() {
       item.className = 'chat-item' + (c.id === state.activeId ? ' active' : '');
       item.innerHTML = `
         <div class="title-wrap">
-          <div class="title">${escapeHtml(c.title)}</div>
+          <div class="title" title="Klik ganda untuk ganti nama">${escapeHtml(c.title)}</div>
         </div>
-        <button class="del" type="button" aria-label="Hapus">${ICONS.trash}</button>
+        <button class="del" type="button" aria-label="Hapus" title="Hapus percakapan">${ICONS.trash}</button>
       `;
       item.addEventListener('click', (e) => {
         if (e.target.closest('.del')) return;
@@ -238,9 +276,26 @@ function renderChatList() {
         renderChatList();
         renderMessages();
       });
-      item.querySelector('.del').addEventListener('click', (e) => {
+      item.querySelector('.title').addEventListener('dblclick', (e) => {
         e.stopPropagation();
-        deleteConversation(c.id);
+        startRenameInline(item, c);
+      });
+      const delBtn = item.querySelector('.del');
+      delBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (delBtn.classList.contains('confirm')) {
+          deleteConversation(c.id);
+        } else {
+          delBtn.classList.add('confirm');
+          delBtn.innerHTML = 'Hapus?';
+          delBtn.title = 'Klik lagi untuk konfirmasi';
+          clearTimeout(delBtn._t);
+          delBtn._t = setTimeout(() => {
+            delBtn.classList.remove('confirm');
+            delBtn.innerHTML = ICONS.trash;
+            delBtn.title = 'Hapus percakapan';
+          }, 2500);
+        }
       });
       grp.appendChild(item);
     }
@@ -302,17 +357,102 @@ function appendMessage(msg, scroll = true) {
   const meta = msg.role === 'assistant' && msg.model
     ? `<span class="role-meta">${escapeHtml(msg.model)}</span>`
     : '';
+  const actions = msg.role === 'assistant'
+    ? `<div class="msg-actions">
+         <button class="msg-action" type="button" data-act="copy">${ICONS.copy}<span>Salin</span></button>
+         <button class="msg-action" type="button" data-act="regen">${ICONS.regen}<span>Ulangi</span></button>
+       </div>`
+    : `<div class="msg-actions">
+         <button class="msg-action" type="button" data-act="copy">${ICONS.copy}<span>Salin</span></button>
+       </div>`;
   el.innerHTML = `
     <div class="avatar">${msg.role === 'user' ? 'U' : 'AI'}</div>
     <div class="content">
       <div class="role">${msg.role === 'user' ? 'Anda' : 'Assistant'}${meta}</div>
       <div class="bubble"></div>
+      ${actions}
     </div>
   `;
-  el.querySelector('.bubble').innerHTML = renderMarkdown(msg.content || '');
+  const bubble = el.querySelector('.bubble');
+  bubble.innerHTML = renderMarkdown(msg.content || '');
+  attachCopyButtons(bubble);
+  wireMsgActions(el, msg);
   box.appendChild(el);
   if (scroll) box.scrollTop = box.scrollHeight;
   return el;
+}
+
+function wireMsgActions(el, msg) {
+  el.querySelectorAll('.msg-action').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const act = btn.dataset.act;
+      if (act === 'copy') {
+        const conv = activeConv();
+        const m = conv?.messages.find(x => x.id === msg.id);
+        if (!m) return;
+        const ok = await copyToClipboard(m.content);
+        if (ok) {
+          const label = btn.querySelector('span');
+          const orig = label.textContent;
+          btn.classList.add('copied');
+          label.textContent = 'Tersalin';
+          setTimeout(() => { btn.classList.remove('copied'); label.textContent = orig; }, 1400);
+        }
+      } else if (act === 'regen') {
+        regenerateAssistant(msg.id);
+      }
+    });
+  });
+}
+
+function regenerateAssistant(assistantId) {
+  if (state.streaming) return;
+  const conv = activeConv();
+  if (!conv) return;
+  const idx = conv.messages.findIndex(m => m.id === assistantId);
+  if (idx < 1) return;
+  // Remove this assistant message and everything after
+  conv.messages.splice(idx);
+  touchConversation(conv);
+  persistConversations();
+  renderMessages();
+  // Now trigger a new assistant response based on remaining messages
+  triggerAssistant();
+}
+
+function triggerAssistant() {
+  const conv = activeConv();
+  if (!conv || !state.settings.selectedModel || !state.settings.apiKey) return;
+  const asstMsg = {
+    id: uid(),
+    role: 'assistant',
+    content: '',
+    model: state.settings.selectedModelName || state.settings.selectedModel
+  };
+  conv.messages.push(asstMsg);
+  const el = appendMessage(asstMsg);
+  el.classList.add('streaming');
+  el.querySelector('.bubble').innerHTML = '<span class="typing-cursor"></span>';
+
+  const messagesForApi = [];
+  if (state.settings.systemPrompt) messagesForApi.push({ role: 'system', content: state.settings.systemPrompt });
+  for (const m of conv.messages) {
+    if (m === asstMsg) continue;
+    messagesForApi.push({ role: m.role, content: m.content });
+  }
+
+  state.streaming = true;
+  state.streamingId = asstMsg.id;
+  setConnState('streaming');
+  updateSendButton();
+
+  window.api.sendChat({
+    id: asstMsg.id,
+    model: state.settings.selectedModel,
+    messages: messagesForApi,
+    temperature: parseFloat(state.settings.temperature) || 0.7,
+    max_tokens: state.settings.maxTokens ? parseInt(state.settings.maxTokens) : undefined
+  });
 }
 
 const _marked = (window.marked && (window.marked.marked || window.marked)) || null;
@@ -330,16 +470,63 @@ function renderMarkdown(text) {
   if (!_marked) {
     return escapeHtml(text).replace(/\n/g, '<br>');
   }
-  const raw = _marked.parse ? _marked.parse(text) : _marked(text);
-  return window.DOMPurify
-    ? window.DOMPurify.sanitize(raw, { ADD_ATTR: ['target'] })
-    : raw;
+  let raw = _marked.parse ? _marked.parse(text) : _marked(text);
+  if (window.DOMPurify) raw = window.DOMPurify.sanitize(raw, { ADD_ATTR: ['target', 'data-code', 'data-lang'] });
+  // Wrap <pre><code class="language-xxx"> with copy button
+  raw = raw.replace(
+    /<pre><code(?:\s+class="([^"]*)")?>([\s\S]*?)<\/code><\/pre>/g,
+    (_, cls, code) => {
+      const langMatch = (cls || '').match(/language-(\S+)/);
+      const lang = langMatch ? langMatch[1] : '';
+      const langLabel = lang ? `<span class="code-lang">${escapeHtml(lang)}</span>` : '';
+      return `<div class="code-block">${langLabel}<button class="copy-code" type="button" data-copy>${ICONS.copy}<span>Copy</span></button><pre><code${cls ? ` class="${escapeHtml(cls)}"` : ''}>${code}</code></pre></div>`;
+    }
+  );
+  return raw;
+}
+
+async function copyToClipboard(text) {
+  try {
+    await navigator.clipboard.writeText(text);
+    return true;
+  } catch {
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    ta.style.cssText = 'position:fixed;opacity:0;left:-9999px';
+    document.body.appendChild(ta);
+    ta.select();
+    let ok = false;
+    try { ok = document.execCommand('copy'); } catch {}
+    ta.remove();
+    return ok;
+  }
+}
+
+function attachCopyButtons(root) {
+  root.querySelectorAll('.copy-code').forEach(btn => {
+    if (btn._wired) return;
+    btn._wired = true;
+    btn.addEventListener('click', async (e) => {
+      e.preventDefault();
+      const pre = btn.parentElement.querySelector('pre code');
+      const text = pre ? pre.textContent : '';
+      const ok = await copyToClipboard(text);
+      if (!ok) return;
+      const label = btn.querySelector('span');
+      const original = label.textContent;
+      btn.classList.add('copied');
+      label.textContent = 'Tersalin';
+      setTimeout(() => { btn.classList.remove('copied'); label.textContent = original; }, 1400);
+    });
+  });
 }
 
 /* ============ Model picker ============ */
 function updateModelDisplay() {
   const label = state.settings.selectedModelName || state.settings.selectedModel || 'Pilih model dulu';
   $('#currentModel').textContent = label;
+  const hint = $('#composerModelHint');
+  if (hint) hint.textContent = state.settings.selectedModel ? label : 'Pilih model dulu';
 }
 
 function openModelDropdown() {
@@ -529,41 +716,34 @@ function sendMessage() {
   input.value = '';
   autoresize(input);
 
-  const asstMsg = {
-    id: uid(),
-    role: 'assistant',
-    content: '',
-    model: state.settings.selectedModelName || state.settings.selectedModel
-  };
-  conv.messages.push(asstMsg);
-  const el = appendMessage(asstMsg);
-  el.querySelector('.bubble').innerHTML = '<span class="typing-cursor"></span>';
+  triggerAssistant();
+}
 
-  const messagesForApi = [];
-  if (state.settings.systemPrompt) messagesForApi.push({ role: 'system', content: state.settings.systemPrompt });
-  for (const m of conv.messages) {
-    if (m === asstMsg) continue;
-    messagesForApi.push({ role: m.role, content: m.content });
+function stopStreaming() {
+  if (!state.streaming || !state.streamingId) return;
+  window.api.abortChat(state.streamingId);
+}
+
+function updateSendButton() {
+  const btn = $('#sendBtn');
+  const icon = $('#sendIcon');
+  if (state.streaming) {
+    btn.classList.add('stop');
+    btn.title = 'Hentikan (Esc)';
+    icon.outerHTML = `<svg id="sendIcon" width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>`;
+  } else {
+    btn.classList.remove('stop');
+    btn.title = 'Kirim (Enter)';
+    icon.outerHTML = `<svg id="sendIcon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5"/><path d="m5 12 7-7 7 7"/></svg>`;
   }
-
-  state.streaming = true;
-  setConnState('streaming');
-  const sendBtn = $('#sendBtn');
-  sendBtn.classList.add('streaming');
-
-  window.api.sendChat({
-    id: asstMsg.id,
-    model: state.settings.selectedModel,
-    messages: messagesForApi,
-    temperature: parseFloat(state.settings.temperature) || 0.7,
-    max_tokens: state.settings.maxTokens ? parseInt(state.settings.maxTokens) : undefined
-  });
 }
 
 function finalizeStream() {
   state.streaming = false;
+  state.streamingId = null;
   setConnState('idle');
-  $('#sendBtn').classList.remove('streaming');
+  updateSendButton();
+  document.querySelectorAll('.msg.streaming').forEach(el => el.classList.remove('streaming'));
   const conv = activeConv();
   if (conv) touchConversation(conv);
   persistConversations();
@@ -576,29 +756,58 @@ function handleDelta({ id, delta }) {
   const m = conv.messages.find(x => x.id === id);
   if (!m) return;
   m.content += delta;
-  const el = document.querySelector(`.msg[data-id="${id}"] .bubble`);
-  if (el) {
-    el.innerHTML = renderMarkdown(m.content) + '<span class="typing-cursor"></span>';
-    const box = $('#messages');
-    if (box.scrollHeight - box.scrollTop - box.clientHeight < 240) box.scrollTop = box.scrollHeight;
+  const bubble = document.querySelector(`.msg[data-id="${id}"] .bubble`);
+  if (bubble) {
+    bubble.innerHTML = renderMarkdown(m.content) + '<span class="typing-cursor"></span>';
+    attachCopyButtons(bubble);
+    smartScroll();
   }
 }
-function handleDone({ id }) {
+function handleDone({ id, aborted }) {
   const conv = activeConv();
   const m = conv?.messages.find(x => x.id === id);
-  const el = document.querySelector(`.msg[data-id="${id}"] .bubble`);
-  if (el && m) el.innerHTML = renderMarkdown(m.content);
+  const bubble = document.querySelector(`.msg[data-id="${id}"] .bubble`);
+  if (bubble && m) {
+    let content = m.content;
+    if (aborted) content += (content ? '\n\n' : '') + '*_(dihentikan)_*';
+    m.content = content;
+    bubble.innerHTML = renderMarkdown(content);
+    attachCopyButtons(bubble);
+  }
   finalizeStream();
 }
 function handleError({ id, error }) {
   setConnState('error');
   const conv = activeConv();
   const m = conv?.messages.find(x => x.id === id);
-  if (m) m.content += (m.content ? '\n\n' : '') + `[Error: ${error}]`;
-  const el = document.querySelector(`.msg[data-id="${id}"] .bubble`);
-  if (el && m) el.innerHTML = renderMarkdown(m.content);
+  const bubble = document.querySelector(`.msg[data-id="${id}"] .bubble`);
+  if (bubble && m) {
+    if (!m.content) m.content = '';
+    bubble.innerHTML = renderMarkdown(m.content) +
+      `<button class="retry-error" type="button" data-retry="${id}">${ICONS.regen}<span>Coba lagi</span></button>` +
+      `<div style="margin-top:6px;font-size:12px;color:var(--text-quaternary)">${escapeHtml(error)}</div>`;
+    attachCopyButtons(bubble);
+    const retry = bubble.querySelector('.retry-error');
+    if (retry) retry.addEventListener('click', () => regenerateAssistant(id));
+  }
   toast({ title: 'Gagal streaming', message: error, type: 'error', duration: 5000 });
   finalizeStream();
+}
+
+function smartScroll() {
+  const box = $('#messages');
+  const dist = box.scrollHeight - box.scrollTop - box.clientHeight;
+  if (dist < 200) box.scrollTop = box.scrollHeight;
+  else updateScrollPill(true);
+}
+
+function updateScrollPill(force) {
+  const box = $('#messages');
+  const pill = $('#scrollBottomPill');
+  if (!pill) return;
+  const dist = box.scrollHeight - box.scrollTop - box.clientHeight;
+  if (force || dist > 240) pill.classList.add('visible');
+  else pill.classList.remove('visible');
 }
 
 /* ============ Settings modal ============ */
@@ -674,7 +883,29 @@ function wire() {
   input.addEventListener('keydown', (e) => {
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); }
   });
-  $('#sendBtn').addEventListener('click', sendMessage);
+  $('#sendBtn').addEventListener('click', () => {
+    if (state.streaming) stopStreaming();
+    else sendMessage();
+  });
+
+  // Scroll-to-bottom pill
+  const messages = $('#messages');
+  const pill = $('#scrollBottomPill');
+  messages.addEventListener('scroll', () => updateScrollPill(false));
+  pill.addEventListener('click', () => {
+    messages.scrollTop = messages.scrollHeight;
+    updateScrollPill(false);
+  });
+
+  // Global keyboard shortcuts
+  document.addEventListener('keydown', (e) => {
+    const ctrl = e.ctrlKey || e.metaKey;
+    if (ctrl && e.key.toLowerCase() === 'n') { e.preventDefault(); newConversation(); }
+    else if (ctrl && e.key.toLowerCase() === 'k') { e.preventDefault(); openModelDropdown(); }
+    else if (ctrl && e.key === ',') { e.preventDefault(); openSettings(); }
+    else if (ctrl && e.key.toLowerCase() === 'l') { e.preventDefault(); $('#chatSearch').focus(); }
+    else if (e.key === 'Escape' && state.streaming) { e.preventDefault(); stopStreaming(); }
+  });
 
   window.api.onChatDelta(handleDelta);
   window.api.onChatDone(handleDone);
@@ -683,5 +914,14 @@ function wire() {
 
 wire();
 loadAll().then(() => {
-  if (state.settings.apiKey) refreshModels();
+  updateSendButton();
+  if (state.settings.apiKey) {
+    refreshModels();
+  } else {
+    // First-run: nudge user to settings
+    setTimeout(() => {
+      toast({ title: 'Selamat datang di Prism', message: 'Isi Base URL dan API key untuk mulai chat.', type: 'info', duration: 4500 });
+      openSettings();
+    }, 300);
+  }
 });

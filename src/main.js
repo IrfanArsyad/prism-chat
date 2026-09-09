@@ -108,6 +108,8 @@ ipcMain.handle('openrouter:models', async () => {
   return await requestJson(opts);
 });
 
+const activeRequests = new Map();
+
 ipcMain.on('openrouter:chat', (event, payload) => {
   const settings = getSettings();
   if (!settings.apiKey) {
@@ -115,6 +117,14 @@ ipcMain.on('openrouter:chat', (event, payload) => {
     return;
   }
   streamChat(event.sender, settings, payload);
+});
+
+ipcMain.on('openrouter:abort', (_e, id) => {
+  const req = activeRequests.get(id);
+  if (req) {
+    req.destroy(new Error('aborted'));
+    activeRequests.delete(id);
+  }
 });
 
 function requestJson(options, body) {
@@ -157,7 +167,10 @@ function streamChat(sender, settings, payload) {
     if (res.statusCode >= 400) {
       let err = '';
       res.on('data', d => err += d);
-      res.on('end', () => sender.send('openrouter:chat:error', { id: payload.id, error: err || `HTTP ${res.statusCode}` }));
+      res.on('end', () => {
+        activeRequests.delete(payload.id);
+        sender.send('openrouter:chat:error', { id: payload.id, error: err || `HTTP ${res.statusCode}` });
+      });
       return;
     }
     res.on('data', chunk => {
@@ -169,6 +182,7 @@ function streamChat(sender, settings, payload) {
         if (!trimmed.startsWith('data:')) continue;
         const data = trimmed.slice(5).trim();
         if (data === '[DONE]') {
+          activeRequests.delete(payload.id);
           sender.send('openrouter:chat:done', { id: payload.id });
           return;
         }
@@ -179,10 +193,18 @@ function streamChat(sender, settings, payload) {
         } catch {}
       }
     });
-    res.on('end', () => sender.send('openrouter:chat:done', { id: payload.id }));
+    res.on('end', () => {
+      activeRequests.delete(payload.id);
+      sender.send('openrouter:chat:done', { id: payload.id });
+    });
   });
 
-  req.on('error', err => sender.send('openrouter:chat:error', { id: payload.id, error: err.message }));
+  activeRequests.set(payload.id, req);
+  req.on('error', err => {
+    activeRequests.delete(payload.id);
+    if (err.message === 'aborted') sender.send('openrouter:chat:done', { id: payload.id, aborted: true });
+    else sender.send('openrouter:chat:error', { id: payload.id, error: err.message });
+  });
   req.write(body);
   req.end();
 }

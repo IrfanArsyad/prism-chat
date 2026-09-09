@@ -103,16 +103,24 @@
       </header>
 
       <section id="messages" class="messages"></section>
+      <button id="scrollBottomPill" class="scroll-bottom-pill" type="button">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M19 12l-7 7-7-7"/></svg>
+        Kembali ke bawah
+      </button>
 
       <footer class="composer">
         <div class="composer-shell">
           <textarea id="input" rows="1" placeholder="Tanyakan apa saja pada Prism..."></textarea>
           <div class="composer-actions">
-            <div class="composer-hint">
-              <kbd>Enter</kbd> kirim <span class="sep">·</span> <kbd>Shift</kbd> + <kbd>Enter</kbd> baris baru
+            <div class="composer-status">
+              <span id="composerModelHint" class="status-model">Pilih model dulu</span>
+              <span class="sep">·</span>
+              <kbd>Enter</kbd> kirim
+              <span class="sep">·</span>
+              <kbd>Shift</kbd> + <kbd>Enter</kbd> baris baru
             </div>
-            <button id="sendBtn" class="btn btn-primary btn-send" type="button" title="Kirim">
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5"/><path d="m5 12 7-7 7 7"/></svg>
+            <button id="sendBtn" class="btn btn-primary btn-send" type="button" title="Kirim (Enter)">
+              <svg id="sendIcon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5"/><path d="m5 12 7-7 7 7"/></svg>
             </button>
           </div>
         </div>
