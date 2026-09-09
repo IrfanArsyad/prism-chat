@@ -1,6 +1,6 @@
 {
   "name": "prism",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "Prism — desktop chat app that refracts one prompt through many models via 9router / OpenRouter",
   "main": "src/main.js",
   "scripts": {

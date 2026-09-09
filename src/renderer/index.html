@@ -64,10 +64,24 @@
           <span class="conn-status-dot" id="connIndicator"><span class="dot"></span></span>
           <span id="connLabel" class="visually-hidden">Idle</span>
         </div>
+        <div class="powered-by">
+          Powered by <a href="#" data-external="https://studiolab.id" class="powered-link">studiolab.id</a>
+        </div>
       </div>
     </aside>
 
     <main class="main">
+      <div id="updateBanner" class="update-banner hidden">
+        <div class="update-banner-content">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+          <span>Versi baru Prism (<strong id="updateVersionTag">v1.2.0</strong>) tersedia!</span>
+        </div>
+        <div class="update-banner-actions">
+          <button id="updateNowBtn" class="btn btn-update" type="button">Update Sekarang</button>
+          <button id="closeUpdateBanner" class="icon-btn-sm" type="button" title="Tutup">✕</button>
+        </div>
+      </div>
+
       <header class="topbar">
         <div class="model-picker">
           <button class="model-trigger" id="modelTrigger" type="button">
@@ -103,6 +117,20 @@
         </div>
 
         <div class="topbar-actions">
+          <div class="role-picker">
+            <button class="role-trigger" id="roleTrigger" type="button" title="Pilih Peran AI (Role)">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+              <span id="currentRoleLabel" class="role-label-name">Role: General</span>
+              <svg class="chev" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
+            </button>
+            <div id="roleDropdown" class="dropdown hidden role-dropdown">
+              <div class="dropdown-header-title">🎭 Peran AI (Roles)</div>
+              <div id="roleList" class="dropdown-list role-list"></div>
+            </div>
+          </div>
+          <button id="shortcutsBtn" class="icon-btn" type="button" title="Panduan Shortcut (Ctrl+?)">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+          </button>
           <button id="findInChatBtn" class="icon-btn" type="button" title="Cari dalam percakapan (Ctrl+F)">
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
           </button>
@@ -160,8 +188,30 @@
 
       <footer class="composer">
         <div class="composer-shell">
-          <textarea id="input" rows="1" placeholder="Tanyakan apa saja pada Prism..."></textarea>
+          <div id="attachmentsBar" class="attachments-bar hidden"></div>
+          <textarea id="input" rows="1" placeholder="Tanyakan apa saja atau paste screenshot (Ctrl+V)..."></textarea>
           <div class="composer-actions">
+            <div class="composer-tools">
+              <div class="skills-picker">
+                <button id="skillsBtn" class="btn-skills-trigger" type="button" title="Pilih Keahlian / Prompt Template">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+                  <span>Skills</span>
+                </button>
+                <div id="skillsDropdown" class="dropdown hidden skills-dropdown">
+                  <div class="dropdown-header-title">⚡ Keahlian / Prompt Templates</div>
+                  <div id="skillsList" class="dropdown-list skills-list"></div>
+                </div>
+              </div>
+              <button id="attachBtn" class="btn-attach-trigger" type="button" title="Sisipkan File, Gambar, atau Kode">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l8.57-8.57a4 4 0 1 1 5.66 5.66l-8.59 8.58a2 2 0 0 1-2.83-2.83l7.88-7.88"/></svg>
+                <span>Lampirkan</span>
+              </button>
+              <button id="pasteImageBtn" class="btn-attach-trigger" type="button" title="Tempel Screenshot dari Clipboard (Ctrl+V)">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+                <span>Paste Screenshot</span>
+              </button>
+              <input type="file" id="fileInput" style="display: none !important;" multiple accept="image/*,.txt,.js,.ts,.jsx,.tsx,.py,.json,.md,.css,.html,.c,.cpp,.go,.rs,.java,.php,.rb,.sql,.yaml,.yml,.sh,.bat,.env" />
+            </div>
             <div class="composer-status">
               <span id="composerModelHint" class="status-model">Pilih model dulu</span>
               <span class="sep">·</span>
@@ -193,9 +243,16 @@
         <div class="settings-section">
           <div class="settings-section-title">Endpoint</div>
           <div class="field">
-            <label for="baseUrl">Host / Base URL</label>
+            <div class="field-header">
+              <label for="baseUrl">Host / Base URL</label>
+              <div class="url-presets">
+                <button type="button" class="preset-pill" data-url="https://openrouter.ai/api/v1">OpenRouter</button>
+                <button type="button" class="preset-pill" data-url="http://localhost:8080/v1">9router</button>
+                <button type="button" class="preset-pill" data-url="http://localhost:11434/v1">Ollama</button>
+              </div>
+            </div>
             <input id="baseUrl" type="text" placeholder="https://openrouter.ai/api/v1" spellcheck="false" />
-            <p class="field-help">Endpoint OpenAI-compatible. Contoh: <code>https://openrouter.ai/api/v1</code> (default), <code>http://localhost:8080/v1</code> (9router self-hosted), atau <code>http://localhost:11434/v1</code> (Ollama).</p>
+            <p class="field-help">Endpoint OpenAI-compatible. Klik preset di atas atau ketik URL kustom.</p>
           </div>
           <div class="field">
             <label for="apiKey">API Key</label>
@@ -219,7 +276,12 @@
             </div>
           </div>
           <div class="field">
-            <label for="systemPrompt">System prompt</label>
+            <div class="field-header">
+              <label for="systemPrompt">System prompt</label>
+              <select id="rolePresetSelect" class="preset-select" title="Pilih Preset Peran (Role)">
+                <option value="">-- Pilih Preset Role --</option>
+              </select>
+            </div>
             <textarea id="systemPrompt" rows="4" placeholder="Contoh: Kamu asisten yang berpikir kritis, menjawab dalam bahasa Indonesia yang ringkas, dan menyertakan contoh kode bila relevan."></textarea>
             <p class="field-help">Kepribadian bawaan yang diterapkan di semua percakapan baru.</p>
           </div>
@@ -227,8 +289,48 @@
       </div>
 
       <footer class="modal-foot">
-        <button class="btn btn-ghost" type="button" data-close="1">Batal</button>
-        <button id="saveSettings" class="btn btn-primary" type="button">Simpan pengaturan</button>
+        <div class="modal-foot-credit">
+          Prism <span id="appVersionBadge">v1.1.0</span> · <button id="checkUpdateBtn" class="btn-text-link" type="button">Cek Pembaruan</button> · Powered by <a href="#" data-external="https://studiolab.id" class="powered-link">studiolab.id</a>
+        </div>
+        <div class="modal-foot-actions">
+          <button class="btn btn-ghost" type="button" data-close="1">Batal</button>
+          <button id="saveSettings" class="btn btn-primary" type="button">Simpan pengaturan</button>
+        </div>
+      </footer>
+    </div>
+  </div>
+
+  <div id="shortcutsModal" class="modal hidden">
+    <div class="modal-overlay" data-close-shortcuts="1"></div>
+    <div class="modal-card modal-sm">
+      <header class="modal-head">
+        <div>
+          <h2>Panduan Pintasan Keyboard</h2>
+          <p class="modal-sub">Navigasi dan gunakan Prism secara efisien dengan keyboard.</p>
+        </div>
+        <button class="icon-btn" id="closeShortcuts" type="button" aria-label="Tutup">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
+        </button>
+      </header>
+
+      <div class="modal-body">
+        <div class="shortcut-list">
+          <div class="shortcut-row"><span class="shortcut-desc">Percakapan baru</span><kbd>Ctrl + N</kbd></div>
+          <div class="shortcut-row"><span class="shortcut-desc">Pemilih Model AI</span><kbd>Ctrl + K</kbd></div>
+          <div class="shortcut-row"><span class="shortcut-desc">Cari percakapan di daftar</span><kbd>Ctrl + L</kbd></div>
+          <div class="shortcut-row"><span class="shortcut-desc">Cari kata dalam percakapan</span><kbd>Ctrl + F</kbd></div>
+          <div class="shortcut-row"><span class="shortcut-desc">Buka Pengaturan</span><kbd>Ctrl + ,</kbd></div>
+          <div class="shortcut-row"><span class="shortcut-desc">Panduan Pintasan Keyboard</span><kbd>Ctrl + ?</kbd></div>
+          <div class="shortcut-row"><span class="shortcut-desc">Hentikan streaming / Tutup popup</span><kbd>Esc</kbd></div>
+          <div class="shortcut-row"><span class="shortcut-desc">Kirim pesan</span><kbd>Enter</kbd></div>
+          <div class="shortcut-row"><span class="shortcut-desc">Baris baru di composer</span><kbd>Shift + Enter</kbd></div>
+        </div>
+      </div>
+
+      <footer class="modal-foot">
+        <div class="modal-foot-actions" style="margin-left:auto">
+          <button class="btn btn-primary" type="button" data-close-shortcuts="1">Tutup</button>
+        </div>
       </footer>
     </div>
   </div>

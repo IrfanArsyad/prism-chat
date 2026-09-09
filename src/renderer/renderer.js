@@ -17,7 +17,8 @@ const state = {
   streaming: false,
   chatFilter: '',
   modelFilter: '',
-  modelFilterMode: 'all'
+  modelFilterMode: 'all',
+  pendingAttachments: []
 };
 
 const ICONS = {
@@ -130,6 +131,215 @@ const SUGGESTIONS = [
   }
 ];
 
+const ROLES = [
+  {
+    id: 'general',
+    name: '🎯 Asisten Umum',
+    desc: 'Bantu menjawab pertanyaan secara jelas, ringkas, dan efisien.',
+    prompt: 'Kamu adalah asisten AI yang cerdas, sopan, dan efisien. Berikan jawaban yang terstruktur, akurat, dan langsung ke poin utama dalam bahasa Indonesia.'
+  },
+  {
+    id: 'fullstack',
+    name: '💻 Senior Full-Stack Engineer',
+    desc: 'Arsitektur kode, refactoring, debugging, dan clean code principles.',
+    prompt: 'Kamu adalah Senior Full-Stack Software Engineer berpengalaman. Jawab dengan standar clean code, sebutkan arsitektur atau pola desain (design pattern) yang relevan, pertimbangkan performa serta keamanan, dan selalu berikan contoh kode yang efisien.'
+  },
+  {
+    id: 'frontend',
+    name: '🎨 UI/UX & Frontend Expert',
+    desc: 'Spesialis CSS, HTML, React, Electron UI design, dan animasi modern.',
+    prompt: 'Kamu adalah Frontend Specialist & UI/UX Expert. Fokus pada tampilan UI yang modern, estetik, responsive, accessible (a11y), serta penulisan CSS dan komponen UI yang bersih.'
+  },
+  {
+    id: 'auditor',
+    name: '🔍 Code Auditor & Security Specialist',
+    desc: 'Tinjau keamanan kode, potensi bug, vulnerability, dan edge cases.',
+    prompt: 'Kamu adalah Code Auditor dan Spesialis Keamanan Siber. Tinjau kode dari sudut pandang keamanan (OWASP, SQLi, XSS, memory leak, race condition), temukan edge cases, dan berikan rekomendasi perbaikan.'
+  },
+  {
+    id: 'translator',
+    name: '🌐 Penerjemah Teknis (ID/EN)',
+    desc: 'Terjemahan akurat dan natural antara Bahasa Indonesia & Inggris.',
+    prompt: 'Kamu adalah penerjemah profesional spesialis istilah teknis & pemrograman. Terjemahkan teks antara Bahasa Indonesia dan Bahasa Inggris dengan gaya yang alami, tepat konteks, dan mempertahankan istilah teknis standar.'
+  },
+  {
+    id: 'techwriter',
+    name: '📝 Technical Writer & Docs Specialist',
+    desc: 'Penulisan dokumentasi API, README, panduan, dan skema arsitektur.',
+    prompt: 'Kamu adalah Technical Writer berpengalaman. Tulis dokumentasi yang rapi, komunikatif, mudah dipahami, berstruktur Markdown yang jelas dengan penjelasan langkah-demi-langkah.'
+  },
+  {
+    id: 'prompteng',
+    name: '🤖 Prompt Engineer',
+    desc: 'Perancang system prompt, custom instructions, dan structured output.',
+    prompt: 'Kamu adalah Prompt Engineer yang ahli merancang prompt LLM. Bantu pengguna membuat system prompt, instruction sets, beberapa contoh (few-shot), dan format output JSON/Markdown yang sangat efektif.'
+  }
+];
+
+const SKILLS = [
+  {
+    id: 'refactor',
+    icon: '🛠️',
+    title: 'Refactor Kode',
+    desc: 'Bersihkan & struktur ulang kode',
+    template: 'Tolong refactor kode berikut agar lebih modular, efisien, dan bersih sesuai best practices:\n\n```\n// tempel kode di sini\n```'
+  },
+  {
+    id: 'debug',
+    icon: '🐛',
+    title: 'Debug & Audit Error',
+    desc: 'Temukan bug & solusi perbaikan',
+    template: 'Analisis error/bug pada kode/log berikut, jelaskan penyebab utamanya, dan berikan solusi perbaikannya:\n\n```\n// tempel kode atau log error di sini\n```'
+  },
+  {
+    id: 'unit_test',
+    icon: '🧪',
+    title: 'Tulis Unit Test',
+    desc: 'Buatkan tes otomatis lengkap',
+    template: 'Buatkan unit test lengkap (termasuk edge cases dan happy path) untuk fungsi/kode berikut:\n\n```\n// tempel kode di sini\n```'
+  },
+  {
+    id: 'explain',
+    icon: '📖',
+    title: 'Jelaskan Kode',
+    desc: 'Penjelasan alur & logika kode',
+    template: 'Jelaskan cara kerja dan logika alur dari kode berikut secara ringkas dan mudah dipahami:\n\n```\n// tempel kode di sini\n```'
+  },
+  {
+    id: 'optimize',
+    icon: '⚡',
+    title: 'Optimasi Performa',
+    desc: 'Analisis time & space complexity',
+    template: 'Analisis kompleksitas waktu & memori dari kode berikut, lalu berikan versi yang teroptimasi:\n\n```\n// tempel kode di sini\n```'
+  },
+  {
+    id: 'translate',
+    icon: '🌐',
+    title: 'Terjemahkan Teknis',
+    desc: 'Terjemahkan ID <-> EN',
+    template: 'Tolong terjemahkan teks/dokumentasi berikut secara akurat dan alami:\n\n'
+  },
+  {
+    id: 'summarize',
+    icon: '📄',
+    title: 'Ringkas Diskus/Kode',
+    desc: 'Buat poin-poin eksekutif',
+    template: 'Ringkas poin-poin utama dan keputusan penting dari teks/diskusi berikut secara padat:\n\n'
+  }
+];
+
+/* ============ Roles & Skills Handlers ============ */
+function updateRoleDisplay() {
+  const currentPrompt = state.settings.systemPrompt || '';
+  const matchedRole = ROLES.find(r => r.prompt === currentPrompt) || ROLES[0];
+  const labelEl = $('#currentRoleLabel');
+  if (labelEl) {
+    const cleanName = matchedRole.name.replace(/^[^\w\s]+\s*/, '');
+    labelEl.textContent = `Role: ${cleanName}`;
+  }
+}
+
+function renderRoleList() {
+  const list = $('#roleList');
+  if (!list) return;
+  const currentPrompt = state.settings.systemPrompt || '';
+  list.innerHTML = ROLES.map(r => {
+    const active = (r.prompt === currentPrompt) || (!currentPrompt && r.id === 'general') ? ' active' : '';
+    return `
+      <div class="role-option${active}" data-id="${r.id}">
+        <div class="role-name">${escapeHtml(r.name)}</div>
+        <div class="role-desc">${escapeHtml(r.desc)}</div>
+      </div>
+    `;
+  }).join('');
+
+  list.querySelectorAll('.role-option').forEach(opt => {
+    opt.addEventListener('click', async () => {
+      const r = ROLES.find(x => x.id === opt.dataset.id);
+      if (r) {
+        state.settings.systemPrompt = r.prompt;
+        const sysInp = $('#systemPrompt');
+        if (sysInp) sysInp.value = r.prompt;
+        await window.api.setSettings(state.settings);
+        updateRoleDisplay();
+        updateTokenBar();
+        toast({ title: 'Peran Diperbarui', message: `Role aktif: ${r.name}`, type: 'success' });
+      }
+      closeRoleDropdown();
+    });
+  });
+}
+
+function openRoleDropdown() {
+  $('#roleDropdown').classList.remove('hidden');
+  $('#roleTrigger').classList.add('open');
+  renderRoleList();
+}
+function closeRoleDropdown() {
+  $('#roleDropdown').classList.add('hidden');
+  $('#roleTrigger').classList.remove('open');
+}
+
+function renderSkillList() {
+  const list = $('#skillsList');
+  if (!list) return;
+  list.innerHTML = SKILLS.map(s => `
+    <div class="skill-option" data-id="${s.id}">
+      <span class="skill-icon">${s.icon}</span>
+      <div class="skill-body">
+        <div class="skill-title">${escapeHtml(s.title)}</div>
+        <div class="skill-desc">${escapeHtml(s.desc)}</div>
+      </div>
+    </div>
+  `).join('');
+
+  list.querySelectorAll('.skill-option').forEach(opt => {
+    opt.addEventListener('click', () => {
+      const skill = SKILLS.find(x => x.id === opt.dataset.id);
+      if (skill) {
+        insertSkillTemplate(skill.template);
+      }
+      closeSkillDropdown();
+    });
+  });
+}
+
+function openSkillDropdown() {
+  $('#skillsDropdown').classList.remove('hidden');
+  $('#skillsBtn').classList.add('open');
+  renderSkillList();
+}
+function closeSkillDropdown() {
+  $('#skillsDropdown').classList.add('hidden');
+  $('#skillsBtn').classList.remove('open');
+}
+
+function insertSkillTemplate(tpl) {
+  const input = $('#input');
+  if (!input) return;
+  if (input.value && input.value.trim()) {
+    input.value = tpl + '\n\n' + input.value;
+  } else {
+    input.value = tpl;
+  }
+  autoresize(input);
+  input.focus();
+  saveDraft();
+}
+
+function initRolePresetSelect() {
+  const sel = $('#rolePresetSelect');
+  if (!sel) return;
+  sel.innerHTML = '<option value="">-- Pilih Preset Role --</option>' +
+    ROLES.map(r => `<option value="${r.id}">${escapeHtml(r.name)}</option>`).join('');
+  sel.addEventListener('change', () => {
+    const r = ROLES.find(x => x.id === sel.value);
+    if (r) {
+      $('#systemPrompt').value = r.prompt;
+    }
+  });
+}
+
 function uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2, 7); }
 function escapeHtml(s) {
   return String(s ?? '').replace(/[&<>"']/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
@@ -173,6 +383,44 @@ function toast({ title, message, type = 'info', duration = 3200 }) {
   }, duration);
 }
 
+let updateReleaseUrl = 'https://github.com/IrfanArsyad/prism-chat/releases/latest';
+
+async function checkForUpdates(silent = false) {
+  try {
+    const ver = await window.api.getAppVersion();
+    const verBadge = $('#appVersionBadge');
+    if (verBadge && ver) verBadge.textContent = `v${ver}`;
+
+    const res = await window.api.checkUpdate();
+    if (res && res.hasUpdate) {
+      updateReleaseUrl = res.releaseUrl || updateReleaseUrl;
+      const banner = $('#updateBanner');
+      const tag = $('#updateVersionTag');
+      if (tag) tag.textContent = `v${res.latestVersion}`;
+      if (banner) banner.classList.remove('hidden');
+
+      toast({
+        title: 'Pembaruan Tersedia',
+        message: `Versi baru v${res.latestVersion} sudah rilis! (Versi saat ini: v${res.currentVersion})`,
+        type: 'info',
+        duration: 6000
+      });
+    } else {
+      if (!silent) {
+        toast({
+          title: 'Versi Terbaru',
+          message: `Prism sudah menggunakan versi terbaru (v${res.currentVersion || ver}).`,
+          type: 'success'
+        });
+      }
+    }
+  } catch (err) {
+    if (!silent) {
+      toast({ title: 'Gagal Memeriksa Pembaruan', message: err.message, type: 'error' });
+    }
+  }
+}
+
 /* ============ Load / Save ============ */
 async function loadAll() {
   const s = await window.api.getSettings();
@@ -193,6 +441,8 @@ async function loadAll() {
   renderChatList();
   renderMessages();
   updateModelDisplay();
+  updateRoleDisplay();
+  initRolePresetSelect();
 }
 
 const persistConversations = () => window.api.setConversations(state.conversations);
@@ -207,7 +457,15 @@ function touchConversation(conv) {
 
 function newConversation() {
   const now = Date.now();
-  const c = { id: uid(), title: 'Percakapan baru', messages: [], model: state.settings.selectedModel, createdAt: now, updatedAt: now };
+  const c = {
+    id: uid(),
+    title: 'Percakapan baru',
+    messages: [],
+    model: state.settings.selectedModel,
+    systemPrompt: state.settings.systemPrompt,
+    createdAt: now,
+    updatedAt: now
+  };
   state.conversations.unshift(c);
   state.activeId = c.id;
   persistConversations();
@@ -328,6 +586,17 @@ function renderChatList() {
         if (e.target.closest('.del')) return;
         saveDraft();
         state.activeId = c.id;
+        if (c.model) {
+          state.settings.selectedModel = c.model;
+          const found = state.models.find(m => m.id === c.model);
+          state.settings.selectedModelName = found?.name || c.model;
+        }
+        if (c.systemPrompt !== undefined) {
+          state.settings.systemPrompt = c.systemPrompt;
+          if ($('#systemPrompt')) $('#systemPrompt').value = c.systemPrompt;
+        }
+        updateModelDisplay();
+        updateRoleDisplay();
         renderChatList();
         renderMessages();
         loadDraft();
@@ -380,6 +649,9 @@ function makeEmptyState() {
     <div class="empty-badge">${ICONS.prism}</div>
     <h1 class="empty-title">Mau bicarakan apa hari ini?</h1>
     <p class="empty-sub">Prism menghubungkan Anda ke katalog model 9router — pilih otak yang paling cocok, lalu mulai obrolan. Semua percakapan tersimpan lokal di perangkat Anda.</p>
+    <div class="empty-signature">
+      Powered by <a href="#" data-external="https://studiolab.id" class="powered-link">studiolab.id</a>
+    </div>
     <div class="suggestion-grid">
       ${SUGGESTIONS.map(s => `
         <button class="suggestion" type="button" data-prompt="${escapeHtml(s.prompt)}">
@@ -433,7 +705,14 @@ function appendMessage(msg, scroll = true) {
     </div>
   `;
   const bubble = el.querySelector('.bubble');
-  bubble.innerHTML = renderMarkdown(msg.content || '');
+  let bodyHtml = '';
+  if (msg.images && msg.images.length) {
+    const imgsHtml = `<div class="msg-images-grid">${msg.images.map(img => `<div class="msg-img-wrap"><img src="${img.dataUrl}" alt="${escapeHtml(img.name || 'image')}" class="msg-img-preview" /></div>`).join('')}</div>`;
+    bodyHtml = imgsHtml + (msg.content ? renderMarkdown(msg.content) : '');
+  } else {
+    bodyHtml = renderMarkdown(msg.content || '');
+  }
+  bubble.innerHTML = bodyHtml;
   attachCopyButtons(bubble);
   highlightBlocks(bubble);
   wireMsgActions(el, msg);
@@ -546,7 +825,16 @@ function triggerAssistant() {
   if (state.settings.systemPrompt) messagesForApi.push({ role: 'system', content: state.settings.systemPrompt });
   for (const m of conv.messages) {
     if (m === asstMsg) continue;
-    messagesForApi.push({ role: m.role, content: m.content });
+    if (m.images && m.images.length) {
+      const parts = [];
+      if (m.content) parts.push({ type: 'text', text: m.content });
+      m.images.forEach(img => {
+        parts.push({ type: 'image_url', image_url: { url: img.dataUrl } });
+      });
+      messagesForApi.push({ role: m.role, content: parts });
+    } else {
+      messagesForApi.push({ role: m.role, content: m.content || '' });
+    }
   }
 
   state.streaming = true;
@@ -681,28 +969,24 @@ async function refreshModels() {
 function renderModelOptionHTML(m) {
   const ctx = formatContext(m.context_length);
   const free = isFreeModel(m);
-  const pIn = formatPricePerMillion(m.pricing?.prompt);
-  const pOut = formatPricePerMillion(m.pricing?.completion);
-  const chips = [];
-  if (ctx) chips.push(`<span class="chip">${escapeHtml(ctx)}</span>`);
-  if (free) chips.push(`<span class="chip free">Gratis</span>`);
-  else {
-    if (pIn) chips.push(`<span class="chip">in ${pIn}/M</span>`);
-    if (pOut) chips.push(`<span class="chip">out ${pOut}/M</span>`);
-  }
   const selected = m.id === state.settings.selectedModel ? ' selected' : '';
   const pinned = isPinned(m.id);
+  const name = m.name || m.id;
+  const showSub = m.name && m.name.toLowerCase() !== m.id.toLowerCase();
+
   return `
-    <div class="model-option${selected}" data-id="${escapeHtml(m.id)}" data-name="${escapeHtml(m.name || m.id)}">
-      <div class="m-avatar">${escapeHtml(initials(m.id))}</div>
-      <div class="m-body">
-        <div class="m-name">${escapeHtml(m.name || m.id)}</div>
-        <div class="m-id">${escapeHtml(m.id)}</div>
-        ${chips.length ? `<div class="m-meta">${chips.join('')}</div>` : ''}
+    <div class="model-option${selected}" data-id="${escapeHtml(m.id)}" data-name="${escapeHtml(name)}">
+      <div class="m-left">
+        ${selected ? `<svg class="m-check" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>` : `<div class="m-dot"></div>`}
+        <span class="m-name">${escapeHtml(name)}</span>
+        ${showSub ? `<span class="m-sub">${escapeHtml(m.id)}</span>` : ''}
       </div>
-      <button class="pin-btn${pinned ? ' pinned' : ''}" type="button" data-pin="${escapeHtml(m.id)}" title="${pinned ? 'Hapus dari favorit' : 'Tambah ke favorit'}">
-        ${pinned ? ICONS.starFilled : ICONS.starOutline}
-      </button>
+      <div class="m-right">
+        ${free ? `<span class="chip free">Gratis</span>` : (ctx ? `<span class="chip">${escapeHtml(ctx)}</span>` : '')}
+        <button class="pin-btn${pinned ? ' pinned' : ''}" type="button" data-pin="${escapeHtml(m.id)}" title="${pinned ? 'Hapus dari favorit' : 'Tambah ke favorit'}">
+          ${pinned ? ICONS.starFilled : ICONS.starOutline}
+        </button>
+      </div>
     </div>
   `;
 }
@@ -812,7 +1096,8 @@ function sendMessage() {
   if (state.streaming) return;
   const input = $('#input');
   const text = input.value.trim();
-  if (!text) return;
+  const hasAttachments = state.pendingAttachments && state.pendingAttachments.length > 0;
+  if (!text && !hasAttachments) return;
 
   if (!state.settings.apiKey) {
     toast({ title: 'API key belum diatur', message: 'Buka Pengaturan untuk mengisi API key 9router / OpenRouter.', type: 'error' });
@@ -827,10 +1112,23 @@ function sendMessage() {
 
   if (!activeConv()) newConversation();
   const conv = activeConv();
-  const userMsg = { id: uid(), role: 'user', content: text, createdAt: Date.now() };
+  conv.model = state.settings.selectedModel;
+  conv.systemPrompt = state.settings.systemPrompt;
+
+  const userMsg = {
+    id: uid(),
+    role: 'user',
+    content: text,
+    images: [...state.pendingAttachments],
+    createdAt: Date.now()
+  };
+  state.pendingAttachments = [];
+  renderAttachmentsBar();
+
   conv.messages.push(userMsg);
   if (conv.title === 'Percakapan baru') {
-    conv.title = text.slice(0, 52) + (text.length > 52 ? '…' : '');
+    const titleText = text || (userMsg.images.length ? 'Lampiran Gambar' : 'Percakapan baru');
+    conv.title = titleText.slice(0, 52) + (titleText.length > 52 ? '…' : '');
   }
   touchConversation(conv);
   renderChatList();
@@ -845,6 +1143,179 @@ function stopStreaming() {
   if (!state.streaming || !state.streamingId) return;
   window.api.abortChat(state.streamingId);
 }
+
+/* ============ File Attachments & Drag-and-Drop ============ */
+function renderAttachmentsBar() {
+  const bar = $('#attachmentsBar');
+  if (!bar) return;
+  if (!state.pendingAttachments || state.pendingAttachments.length === 0) {
+    bar.classList.add('hidden');
+    bar.innerHTML = '';
+    return;
+  }
+  bar.classList.remove('hidden');
+  bar.innerHTML = state.pendingAttachments.map(att => `
+    <div class="attachment-chip" data-id="${att.id}">
+      <img src="${att.dataUrl}" alt="${escapeHtml(att.name)}" class="attachment-thumb" />
+      <span class="attachment-name">${escapeHtml(att.name)}</span>
+      <button class="attachment-remove" type="button" data-remove="${att.id}">${ICONS.x}</button>
+    </div>
+  `).join('');
+
+  bar.querySelectorAll('.attachment-remove').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const id = btn.dataset.remove;
+      state.pendingAttachments = state.pendingAttachments.filter(x => x.id !== id);
+      renderAttachmentsBar();
+    });
+  });
+}
+
+function attachImageData(dataUrl, name) {
+  if (!dataUrl) return;
+  if (state.pendingAttachments.some(a => a.dataUrl === dataUrl)) return;
+  const fileName = name || `Screenshot-${new Date().toLocaleTimeString('id-ID').replace(/:/g, '-')}.png`;
+  const att = {
+    id: uid(),
+    type: 'image',
+    name: fileName,
+    dataUrl
+  };
+  state.pendingAttachments.push(att);
+  renderAttachmentsBar();
+  toast({ title: 'Gambar Dilampirkan', message: `${fileName} berhasil dimasukkan.`, type: 'success' });
+}
+
+async function pasteScreenshotFromClipboard() {
+  if (window.api && window.api.readClipboardImage) {
+    const dataUrl = await window.api.readClipboardImage();
+    if (dataUrl) {
+      attachImageData(dataUrl);
+      return true;
+    }
+  }
+  return false;
+}
+
+let lastPasteTimestamp = 0;
+
+async function handlePasteEvent(e) {
+  const now = Date.now();
+  if (now - lastPasteTimestamp < 300) {
+    e.preventDefault();
+    return;
+  }
+
+  const clipboardData = e.clipboardData || window.clipboardData;
+  if (!clipboardData) return;
+
+  const files = clipboardData.files;
+  const items = clipboardData.items;
+
+  // 1. Check clipboard files
+  if (files && files.length) {
+    const imgFiles = Array.from(files).filter(f => f.type.startsWith('image/'));
+    if (imgFiles.length > 0) {
+      e.preventDefault();
+      lastPasteTimestamp = now;
+      readAndAttachFiles(imgFiles);
+      return;
+    }
+  }
+
+  // 2. Check clipboard items
+  if (items && items.length) {
+    for (const item of items) {
+      if (item.type.startsWith('image/') || item.kind === 'file') {
+        const file = item.getAsFile();
+        if (file && file.type.startsWith('image/')) {
+          e.preventDefault();
+          lastPasteTimestamp = now;
+          const reader = new FileReader();
+          reader.onload = (evt) => {
+            attachImageData(evt.target.result, file.name);
+          };
+          reader.readAsDataURL(file);
+          return;
+        }
+      }
+    }
+  }
+
+  // 3. Fallback: check Electron native clipboard
+  if (window.api && window.api.readClipboardImage) {
+    const success = await pasteScreenshotFromClipboard();
+    if (success) {
+      e.preventDefault();
+      lastPasteTimestamp = now;
+    }
+  }
+}
+
+function readAndAttachFiles(files) {
+  if (!files || !files.length) return;
+  const input = $('#input');
+  const fileArray = Array.from(files);
+
+  fileArray.forEach(file => {
+    if (file.type.startsWith('image/')) {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        attachImageData(e.target.result, file.name);
+      };
+      reader.readAsDataURL(file);
+    } else {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const content = e.target.result;
+        const ext = file.name.split('.').pop().toLowerCase();
+        const codeBlock = `\n\n\`\`\`${ext}\n// File: ${file.name}\n${content}\n\`\`\`\n`;
+
+        if (input.value && input.value.trim()) {
+          input.value += codeBlock;
+        } else {
+          input.value = `Berikut adalah berkas \`${file.name}\`:\n${codeBlock}`;
+        }
+        autoresize(input);
+        saveDraft();
+        toast({ title: 'Berkas Dilampirkan', message: `${file.name} dimasukkan ke composer.`, type: 'success' });
+        input.focus();
+      };
+      reader.readAsText(file);
+    }
+  });
+}
+
+function setupDragAndDrop() {
+  const input = $('#input');
+  if (!input) return;
+
+  ['dragenter', 'dragover'].forEach(name => {
+    input.addEventListener(name, (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      input.classList.add('drag-over');
+    });
+  });
+
+  ['dragleave', 'drop'].forEach(name => {
+    input.addEventListener(name, (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      input.classList.remove('drag-over');
+    });
+  });
+
+  input.addEventListener('drop', (e) => {
+    const files = e.dataTransfer?.files;
+    if (files && files.length) readAndAttachFiles(files);
+  });
+}
+
+/* ============ Shortcuts modal ============ */
+function openShortcutsModal() { $('#shortcutsModal').classList.remove('hidden'); }
+function closeShortcutsModal() { $('#shortcutsModal').classList.add('hidden'); }
 
 function updateSendButton() {
   const btn = $('#sendBtn');
@@ -1144,6 +1615,18 @@ function wire() {
     renderChatList();
   });
 
+  $('#roleTrigger')?.addEventListener('click', (e) => {
+    e.stopPropagation();
+    if ($('#roleDropdown').classList.contains('hidden')) openRoleDropdown();
+    else closeRoleDropdown();
+  });
+
+  $('#skillsBtn')?.addEventListener('click', (e) => {
+    e.stopPropagation();
+    if ($('#skillsDropdown').classList.contains('hidden')) openSkillDropdown();
+    else closeSkillDropdown();
+  });
+
   $('#modelTrigger').addEventListener('click', (e) => {
     e.stopPropagation();
     if ($('#modelDropdown').classList.contains('hidden')) openModelDropdown();
@@ -1174,10 +1657,14 @@ function wire() {
   });
   document.addEventListener('click', (e) => {
     if (!e.target.closest('.model-picker')) closeModelDropdown();
+    if (!e.target.closest('.role-picker')) closeRoleDropdown();
+    if (!e.target.closest('.skills-picker')) closeSkillDropdown();
   });
   document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') {
       if (!$('#modelDropdown').classList.contains('hidden')) closeModelDropdown();
+      else if (!$('#roleDropdown').classList.contains('hidden')) closeRoleDropdown();
+      else if (!$('#skillsDropdown').classList.contains('hidden')) closeSkillDropdown();
       else if (!$('#settingsModal').classList.contains('hidden')) closeSettings();
     }
   });
@@ -1191,6 +1678,27 @@ function wire() {
     if (state.streaming) stopStreaming();
     else sendMessage();
   });
+
+  // External links — handle data-external + any http(s) anchors
+  const handleAnchor = (e) => {
+    const dataEx = e.target.closest('[data-external]');
+    if (dataEx) {
+      e.preventDefault();
+      const url = dataEx.dataset.external;
+      if (url) window.api.openExternal(url);
+      return;
+    }
+    const a = e.target.closest('a[href]');
+    if (a) {
+      const href = a.getAttribute('href');
+      if (href && /^https?:\/\//i.test(href)) {
+        e.preventDefault();
+        window.api.openExternal(href);
+      }
+    }
+  };
+  document.addEventListener('click', handleAnchor);
+  document.addEventListener('auxclick', handleAnchor); // middle-click
 
   // Chat menu
   $('#chatMenuBtn').addEventListener('click', (e) => { e.stopPropagation(); toggleChatMenu(); });
@@ -1221,6 +1729,40 @@ function wire() {
     updateScrollPill(false);
   });
 
+  // Attach file, paste image, & Drag and drop
+  $('#attachBtn')?.addEventListener('click', () => $('#fileInput')?.click());
+  $('#pasteImageBtn')?.addEventListener('click', () => pasteScreenshotFromClipboard());
+  $('#fileInput')?.addEventListener('change', (e) => {
+    readAndAttachFiles(e.target.files);
+    e.target.value = '';
+  });
+  document.addEventListener('paste', handlePasteEvent);
+  setupDragAndDrop();
+
+  // Shortcuts modal
+  $('#shortcutsBtn')?.addEventListener('click', openShortcutsModal);
+  $('#closeShortcuts')?.addEventListener('click', closeShortcutsModal);
+  document.querySelectorAll('[data-close-shortcuts="1"]').forEach(el => el.addEventListener('click', closeShortcutsModal));
+
+  // Endpoint presets
+  document.querySelectorAll('.preset-pill[data-url]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      $('#baseUrl').value = btn.dataset.url;
+      toast({ title: 'Endpoint Diubah', message: `Base URL diatur ke: ${btn.dataset.url}`, type: 'info' });
+    });
+  });
+
+  // Updates
+  $('#updateNowBtn')?.addEventListener('click', () => {
+    if (updateReleaseUrl) window.api.openExternal(updateReleaseUrl);
+  });
+  $('#closeUpdateBanner')?.addEventListener('click', () => {
+    $('#updateBanner')?.classList.add('hidden');
+  });
+  $('#checkUpdateBtn')?.addEventListener('click', () => {
+    checkForUpdates(false);
+  });
+
   // Global keyboard shortcuts
   document.addEventListener('keydown', (e) => {
     const ctrl = e.ctrlKey || e.metaKey;
@@ -1229,8 +1771,10 @@ function wire() {
     else if (ctrl && e.key === ',') { e.preventDefault(); openSettings(); }
     else if (ctrl && e.key.toLowerCase() === 'l') { e.preventDefault(); $('#chatSearch').focus(); }
     else if (ctrl && e.key.toLowerCase() === 'f') { e.preventDefault(); openFindBar(); }
+    else if (ctrl && (e.key === '?' || e.key === '/')) { e.preventDefault(); openShortcutsModal(); }
     else if (e.key === 'Escape') {
       if (!$('#findBar').classList.contains('hidden')) { e.preventDefault(); closeFindBar(); }
+      else if (!$('#shortcutsModal').classList.contains('hidden')) { e.preventDefault(); closeShortcutsModal(); }
       else if (state.streaming) { e.preventDefault(); stopStreaming(); }
     }
   });
@@ -1245,6 +1789,7 @@ loadAll().then(() => {
   updateSendButton();
   loadDraft();
   updateTokenBar();
+  checkForUpdates(true);
   if (state.settings.apiKey) {
     refreshModels();
   } else {

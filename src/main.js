@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, safeStorage, dialog } = require('electron');
+const { app, BrowserWindow, ipcMain, safeStorage, dialog, shell, clipboard } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const https = require('https');
@@ -61,6 +61,19 @@ function createWindow() {
   });
   win.setMenuBarVisibility(false);
   win.loadFile(path.join(__dirname, 'renderer', 'index.html'));
+
+  // Route any external navigation to the default browser
+  win.webContents.setWindowOpenHandler(({ url }) => {
+    if (/^https?:\/\//i.test(url)) shell.openExternal(url);
+    return { action: 'deny' };
+  });
+  win.webContents.on('will-navigate', (event, url) => {
+    const current = win.webContents.getURL();
+    if (url !== current && /^https?:\/\//i.test(url)) {
+      event.preventDefault();
+      shell.openExternal(url);
+    }
+  });
 }
 
 app.whenReady().then(createWindow);
@@ -71,6 +84,68 @@ ipcMain.handle('settings:get', () => getSettings());
 ipcMain.handle('settings:set', (_e, s) => { saveSettings(s); return true; });
 ipcMain.handle('conversations:get', () => readJson(CONV_PATH(), []));
 ipcMain.handle('conversations:set', (_e, c) => { writeJson(CONV_PATH(), c); return true; });
+ipcMain.handle('clipboard:read-image', () => {
+  try {
+    const img = clipboard.readImage();
+    if (img && !img.isEmpty()) {
+      return img.toDataURL();
+    }
+  } catch { return null; }
+  return null;
+});
+
+const pkg = require('../package.json');
+const REPO_OWNER = 'IrfanArsyad';
+const REPO_NAME = 'prism-chat';
+
+ipcMain.handle('app:version', () => pkg.version);
+
+function isNewerVersion(latest, current) {
+  const l = (latest || '').replace(/^v/, '').split('.').map(Number);
+  const c = (current || '').replace(/^v/, '').split('.').map(Number);
+  for (let i = 0; i < Math.max(l.length, c.length); i++) {
+    const lNum = l[i] || 0;
+    const cNum = c[i] || 0;
+    if (lNum > cNum) return true;
+    if (lNum < cNum) return false;
+  }
+  return false;
+}
+
+ipcMain.handle('app:check-update', async () => {
+  const currentVersion = pkg.version;
+  const opts = {
+    protocol: 'https:',
+    hostname: 'api.github.com',
+    path: `/repos/${REPO_OWNER}/${REPO_NAME}/releases/latest`,
+    method: 'GET',
+    headers: {
+      'User-Agent': 'Prism-Desktop-App',
+      'Accept': 'application/vnd.github.v3+json'
+    }
+  };
+
+  try {
+    const data = await requestJson(opts);
+    const latestVersion = (data.tag_name || '').replace(/^v/, '');
+    const hasUpdate = isNewerVersion(latestVersion, currentVersion);
+    return {
+      hasUpdate,
+      currentVersion,
+      latestVersion,
+      releaseUrl: data.html_url || `https://github.com/${REPO_OWNER}/${REPO_NAME}/releases/latest`,
+      releaseName: data.name || data.tag_name,
+      releaseNotes: data.body || ''
+    };
+  } catch (err) {
+    return {
+      hasUpdate: false,
+      currentVersion,
+      error: err.message,
+      releaseUrl: `https://github.com/${REPO_OWNER}/${REPO_NAME}/releases`
+    };
+  }
+});
 
 function resolveBaseUrl(settings) {
   const raw = (settings.baseUrl || DEFAULT_BASE_URL).trim().replace(/\/+$/, '');
@@ -117,6 +192,10 @@ ipcMain.on('openrouter:chat', (event, payload) => {
     return;
   }
   streamChat(event.sender, settings, payload);
+});
+
+ipcMain.on('shell:open', (_e, url) => {
+  if (typeof url === 'string' && /^https?:\/\//.test(url)) shell.openExternal(url);
 });
 
 ipcMain.handle('export:save', async (event, { defaultName, content, filters }) => {

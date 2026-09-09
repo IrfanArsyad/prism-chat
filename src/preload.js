@@ -1,6 +1,8 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('api', {
+  getAppVersion: () => ipcRenderer.invoke('app:version'),
+  checkUpdate: () => ipcRenderer.invoke('app:check-update'),
   getSettings: () => ipcRenderer.invoke('settings:get'),
   setSettings: (s) => ipcRenderer.invoke('settings:set', s),
   getConversations: () => ipcRenderer.invoke('conversations:get'),
@@ -9,6 +11,8 @@ contextBridge.exposeInMainWorld('api', {
   sendChat: (payload) => ipcRenderer.send('openrouter:chat', payload),
   abortChat: (id) => ipcRenderer.send('openrouter:abort', id),
   saveExport: (payload) => ipcRenderer.invoke('export:save', payload),
+  readClipboardImage: () => ipcRenderer.invoke('clipboard:read-image'),
+  openExternal: (url) => ipcRenderer.send('shell:open', url),
   onChatDelta: (cb) => ipcRenderer.on('openrouter:chat:delta', (_e, data) => cb(data)),
   onChatDone: (cb) => ipcRenderer.on('openrouter:chat:done', (_e, data) => cb(data)),
   onChatError: (cb) => ipcRenderer.on('openrouter:chat:error', (_e, data) => cb(data))
