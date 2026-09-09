@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, safeStorage } = require('electron');
+const { app, BrowserWindow, ipcMain, safeStorage, dialog } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const https = require('https');
@@ -117,6 +117,17 @@ ipcMain.on('openrouter:chat', (event, payload) => {
     return;
   }
   streamChat(event.sender, settings, payload);
+});
+
+ipcMain.handle('export:save', async (event, { defaultName, content, filters }) => {
+  const win = BrowserWindow.fromWebContents(event.sender);
+  const res = await dialog.showSaveDialog(win, {
+    defaultPath: defaultName,
+    filters: filters || [{ name: 'All Files', extensions: ['*'] }]
+  });
+  if (res.canceled || !res.filePath) return { ok: false };
+  fs.writeFileSync(res.filePath, content, 'utf8');
+  return { ok: true, path: res.filePath };
 });
 
 ipcMain.on('openrouter:abort', (_e, id) => {

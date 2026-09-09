@@ -30,8 +30,62 @@ const ICONS = {
   starFilled: '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="1" stroke-linejoin="round"><path d="m12 2 3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2Z"/></svg>',
   copy: '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>',
   regen: '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-6.2-8.55"/><path d="M21 4v6h-6"/></svg>',
-  stop: '<svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>'
+  stop: '<svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>',
+  edit: '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>'
 };
+
+function formatRelativeTime(ts) {
+  if (!ts) return '';
+  const s = (Date.now() - ts) / 1000;
+  if (s < 45) return 'baru saja';
+  if (s < 90) return '1 menit lalu';
+  if (s < 3600) return `${Math.round(s / 60)} menit lalu`;
+  if (s < 5400) return '1 jam lalu';
+  if (s < 86400) return `${Math.round(s / 3600)} jam lalu`;
+  if (s < 172800) return 'kemarin';
+  if (s < 604800) return `${Math.round(s / 86400)} hari lalu`;
+  return new Date(ts).toLocaleDateString('id-ID', { day: 'numeric', month: 'short' });
+}
+
+function estimateTokens(text) {
+  if (!text) return 0;
+  return Math.ceil(text.length / 4);
+}
+
+function estimateConvTokens(conv) {
+  if (!conv) return { input: 0, output: 0 };
+  let input = 0, output = 0;
+  if (state.settings.systemPrompt) input += estimateTokens(state.settings.systemPrompt);
+  for (const m of conv.messages) {
+    const t = estimateTokens(m.content);
+    if (m.role === 'assistant') output += t;
+    else input += t;
+  }
+  return { input, output };
+}
+
+function estimateCost(conv) {
+  if (!conv) return 0;
+  const model = state.models.find(m => m.id === state.settings.selectedModel);
+  if (!model || !model.pricing) return 0;
+  const { input, output } = estimateConvTokens(conv);
+  const pIn = parseFloat(model.pricing.prompt || 0);
+  const pOut = parseFloat(model.pricing.completion || 0);
+  return input * pIn + output * pOut;
+}
+
+function updateTokenBar() {
+  const el = $('#tokenBar');
+  if (!el) return;
+  const conv = activeConv();
+  if (!conv) { el.innerHTML = ''; return; }
+  const { input, output } = estimateConvTokens(conv);
+  const total = input + output;
+  const cost = estimateCost(conv);
+  const parts = [`<b>~${total.toLocaleString('id-ID')}</b> tokens`];
+  if (cost > 0) parts.push(`<span class="cost">${cost < 0.01 ? `$${cost.toFixed(4)}` : `$${cost.toFixed(3)}`}</span>`);
+  el.innerHTML = parts.join(' · ');
+}
 
 function isFreeModel(m) {
   const pin = parseFloat(m.pricing?.prompt || 0);
@@ -272,9 +326,12 @@ function renderChatList() {
       `;
       item.addEventListener('click', (e) => {
         if (e.target.closest('.del')) return;
+        saveDraft();
         state.activeId = c.id;
         renderChatList();
         renderMessages();
+        loadDraft();
+        updateTokenBar();
       });
       item.querySelector('.title').addEventListener('dblclick', (e) => {
         e.stopPropagation();
@@ -363,12 +420,14 @@ function appendMessage(msg, scroll = true) {
          <button class="msg-action" type="button" data-act="regen">${ICONS.regen}<span>Ulangi</span></button>
        </div>`
     : `<div class="msg-actions">
+         <button class="msg-action" type="button" data-act="edit">${ICONS.edit}<span>Edit</span></button>
          <button class="msg-action" type="button" data-act="copy">${ICONS.copy}<span>Salin</span></button>
        </div>`;
+  const ts = msg.createdAt ? `<span class="role-meta" title="${new Date(msg.createdAt).toLocaleString()}">${formatRelativeTime(msg.createdAt)}</span>` : '';
   el.innerHTML = `
     <div class="avatar">${msg.role === 'user' ? 'U' : 'AI'}</div>
     <div class="content">
-      <div class="role">${msg.role === 'user' ? 'Anda' : 'Assistant'}${meta}</div>
+      <div class="role">${msg.role === 'user' ? 'Anda' : 'Assistant'}${meta}${ts}</div>
       <div class="bubble"></div>
       ${actions}
     </div>
@@ -376,6 +435,7 @@ function appendMessage(msg, scroll = true) {
   const bubble = el.querySelector('.bubble');
   bubble.innerHTML = renderMarkdown(msg.content || '');
   attachCopyButtons(bubble);
+  highlightBlocks(bubble);
   wireMsgActions(el, msg);
   box.appendChild(el);
   if (scroll) box.scrollTop = box.scrollHeight;
@@ -400,8 +460,55 @@ function wireMsgActions(el, msg) {
         }
       } else if (act === 'regen') {
         regenerateAssistant(msg.id);
+      } else if (act === 'edit') {
+        startEditUserMessage(msg.id);
       }
     });
+  });
+}
+
+function startEditUserMessage(msgId) {
+  if (state.streaming) return;
+  const conv = activeConv();
+  const m = conv?.messages.find(x => x.id === msgId);
+  if (!m || m.role !== 'user') return;
+  const el = document.querySelector(`.msg[data-id="${msgId}"]`);
+  if (!el) return;
+  el.classList.add('editing');
+  const content = el.querySelector('.content');
+  const shell = document.createElement('div');
+  shell.className = 'edit-shell';
+  shell.innerHTML = `
+    <textarea class="edit-textarea">${escapeHtml(m.content)}</textarea>
+    <div class="edit-actions">
+      <button class="btn btn-ghost" type="button" data-cancel>Batal</button>
+      <button class="btn btn-primary" type="button" data-save>Simpan & kirim ulang</button>
+    </div>
+  `;
+  content.appendChild(shell);
+  const ta = shell.querySelector('textarea');
+  ta.focus();
+  ta.setSelectionRange(ta.value.length, ta.value.length);
+  autoresize(ta);
+  ta.addEventListener('input', () => autoresize(ta));
+  const cleanup = () => { el.classList.remove('editing'); shell.remove(); };
+  shell.querySelector('[data-cancel]').addEventListener('click', cleanup);
+  shell.querySelector('[data-save]').addEventListener('click', () => {
+    const newText = ta.value.trim();
+    if (!newText) return cleanup();
+    m.content = newText;
+    // remove everything after this user message
+    const idx = conv.messages.findIndex(x => x.id === msgId);
+    conv.messages.splice(idx + 1);
+    touchConversation(conv);
+    persistConversations();
+    renderMessages();
+    renderChatList();
+    triggerAssistant();
+  });
+  ta.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') { e.preventDefault(); cleanup(); }
+    if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); shell.querySelector('[data-save]').click(); }
   });
 }
 
@@ -427,7 +534,8 @@ function triggerAssistant() {
     id: uid(),
     role: 'assistant',
     content: '',
-    model: state.settings.selectedModelName || state.settings.selectedModel
+    model: state.settings.selectedModelName || state.settings.selectedModel,
+    createdAt: Date.now()
   };
   conv.messages.push(asstMsg);
   const el = appendMessage(asstMsg);
@@ -462,6 +570,19 @@ if (_marked && _marked.setOptions) {
     breaks: true,
     headerIds: false,
     mangle: false
+  });
+}
+const _hljs = window.hljs || null;
+if (_hljs) _hljs.configure({ ignoreUnescapedHTML: true, throwUnescapedHTML: false });
+
+function highlightBlocks(root) {
+  if (!_hljs) return;
+  root.querySelectorAll('pre code').forEach(el => {
+    if (el.dataset.hlDone) return;
+    try {
+      _hljs.highlightElement(el);
+      el.dataset.hlDone = '1';
+    } catch {}
   });
 }
 
@@ -594,6 +715,7 @@ function attachModelOptionHandlers(list) {
       state.settings.selectedModelName = opt.dataset.name;
       window.api.setSettings(state.settings);
       updateModelDisplay();
+      updateTokenBar();
       closeModelDropdown();
     });
   });
@@ -705,7 +827,7 @@ function sendMessage() {
 
   if (!activeConv()) newConversation();
   const conv = activeConv();
-  const userMsg = { id: uid(), role: 'user', content: text };
+  const userMsg = { id: uid(), role: 'user', content: text, createdAt: Date.now() };
   conv.messages.push(userMsg);
   if (conv.title === 'Percakapan baru') {
     conv.title = text.slice(0, 52) + (text.length > 52 ? '…' : '');
@@ -748,7 +870,11 @@ function finalizeStream() {
   if (conv) touchConversation(conv);
   persistConversations();
   renderChatList();
+  updateTokenBar();
 }
+
+let _renderScheduled = false;
+let _renderPendingId = null;
 
 function handleDelta({ id, delta }) {
   const conv = activeConv();
@@ -756,12 +882,23 @@ function handleDelta({ id, delta }) {
   const m = conv.messages.find(x => x.id === id);
   if (!m) return;
   m.content += delta;
-  const bubble = document.querySelector(`.msg[data-id="${id}"] .bubble`);
-  if (bubble) {
-    bubble.innerHTML = renderMarkdown(m.content) + '<span class="typing-cursor"></span>';
-    attachCopyButtons(bubble);
-    smartScroll();
-  }
+  _renderPendingId = id;
+  if (_renderScheduled) return;
+  _renderScheduled = true;
+  requestAnimationFrame(() => {
+    _renderScheduled = false;
+    const pid = _renderPendingId;
+    if (!pid) return;
+    const cc = activeConv();
+    const mm = cc?.messages.find(x => x.id === pid);
+    if (!mm) return;
+    const bubble = document.querySelector(`.msg[data-id="${pid}"] .bubble`);
+    if (bubble) {
+      bubble.innerHTML = renderMarkdown(mm.content) + '<span class="typing-cursor"></span>';
+      attachCopyButtons(bubble);
+      smartScroll();
+    }
+  });
 }
 function handleDone({ id, aborted }) {
   const conv = activeConv();
@@ -769,10 +906,11 @@ function handleDone({ id, aborted }) {
   const bubble = document.querySelector(`.msg[data-id="${id}"] .bubble`);
   if (bubble && m) {
     let content = m.content;
-    if (aborted) content += (content ? '\n\n' : '') + '*_(dihentikan)_*';
+    if (aborted) content += (content ? '\n\n' : '') + '_(dihentikan)_';
     m.content = content;
     bubble.innerHTML = renderMarkdown(content);
     attachCopyButtons(bubble);
+    highlightBlocks(bubble);
   }
   finalizeStream();
 }
@@ -808,6 +946,172 @@ function updateScrollPill(force) {
   const dist = box.scrollHeight - box.scrollTop - box.clientHeight;
   if (force || dist > 240) pill.classList.add('visible');
   else pill.classList.remove('visible');
+}
+
+/* ============ Draft ============ */
+function saveDraft() {
+  const conv = activeConv();
+  if (!conv) return;
+  const val = $('#input').value;
+  if (val) conv.draft = val; else delete conv.draft;
+  persistConversations();
+}
+function loadDraft() {
+  const conv = activeConv();
+  const input = $('#input');
+  input.value = conv?.draft || '';
+  autoresize(input);
+}
+
+/* ============ Export ============ */
+function conversationToMarkdown(conv) {
+  const lines = [`# ${conv.title}`, ''];
+  lines.push(`> Diekspor ${new Date().toLocaleString('id-ID')} · model ${state.settings.selectedModelName || state.settings.selectedModel || 'n/a'}`);
+  lines.push('');
+  for (const m of conv.messages) {
+    const who = m.role === 'user' ? '### Anda' : `### Assistant${m.model ? ` (${m.model})` : ''}`;
+    lines.push(who);
+    lines.push('');
+    lines.push(m.content);
+    lines.push('');
+  }
+  return lines.join('\n');
+}
+
+async function exportConversation(format) {
+  const conv = activeConv();
+  if (!conv) { toast({ title: 'Tidak ada percakapan', message: 'Pilih percakapan yang mau di-export.', type: 'error' }); return; }
+  const safeTitle = conv.title.replace(/[<>:"\/\\|?*]/g, '_').slice(0, 60);
+  let content, filters, defaultName;
+  if (format === 'md') {
+    content = conversationToMarkdown(conv);
+    defaultName = `${safeTitle}.md`;
+    filters = [{ name: 'Markdown', extensions: ['md'] }];
+  } else if (format === 'json') {
+    content = JSON.stringify(conv, null, 2);
+    defaultName = `${safeTitle}.json`;
+    filters = [{ name: 'JSON', extensions: ['json'] }];
+  } else return;
+  const res = await window.api.saveExport({ defaultName, content, filters });
+  if (res.ok) toast({ title: 'Tersimpan', message: `Percakapan diekspor ke ${res.path}`, type: 'success' });
+}
+
+async function copyAllMessages() {
+  const conv = activeConv();
+  if (!conv) return;
+  const ok = await copyToClipboard(conversationToMarkdown(conv));
+  if (ok) toast({ title: 'Tersalin', message: 'Seluruh percakapan disalin sebagai Markdown.', type: 'success' });
+}
+
+function clearConversationMessages() {
+  const conv = activeConv();
+  if (!conv || conv.messages.length === 0) return;
+  if (!confirmToast('Hapus semua pesan di percakapan ini?')) return;
+  conv.messages = [];
+  conv.title = 'Percakapan baru';
+  touchConversation(conv);
+  persistConversations();
+  renderChatList();
+  renderMessages();
+  updateTokenBar();
+}
+
+function confirmToast(msg) {
+  // simple browser confirm fallback (native Electron dialog would be nicer but this is fine)
+  return window.confirm(msg);
+}
+
+/* ============ Find in conversation ============ */
+const findState = { hits: [], index: -1, query: '' };
+
+function openFindBar() {
+  $('#findBar').classList.remove('hidden');
+  const inp = $('#findInput');
+  inp.focus();
+  inp.select();
+}
+function closeFindBar() {
+  $('#findBar').classList.add('hidden');
+  clearFindHighlights();
+  findState.hits = []; findState.index = -1; findState.query = '';
+  $('#findCount').textContent = '0/0';
+  $('#findInput').value = '';
+}
+function clearFindHighlights() {
+  document.querySelectorAll('.find-hit').forEach(mark => {
+    const parent = mark.parentNode;
+    parent.replaceChild(document.createTextNode(mark.textContent), mark);
+    parent.normalize();
+  });
+}
+function runFind(query) {
+  clearFindHighlights();
+  findState.query = query;
+  findState.hits = [];
+  findState.index = -1;
+  if (!query) { $('#findCount').textContent = '0/0'; return; }
+  const q = query.toLowerCase();
+  const bubbles = document.querySelectorAll('.msg .bubble');
+  bubbles.forEach(b => highlightTextIn(b, q));
+  findState.hits = Array.from(document.querySelectorAll('.find-hit'));
+  if (findState.hits.length > 0) navigateFind(1);
+  $('#findCount').textContent = `${findState.hits.length === 0 ? 0 : findState.index + 1}/${findState.hits.length}`;
+}
+function highlightTextIn(root, query) {
+  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
+    acceptNode: (n) => n.parentElement.closest('.code-block, script, style') ? NodeFilter.FILTER_REJECT : NodeFilter.FILTER_ACCEPT
+  });
+  const nodes = [];
+  while (walker.nextNode()) nodes.push(walker.currentNode);
+  for (const node of nodes) {
+    const text = node.nodeValue;
+    const lower = text.toLowerCase();
+    let idx = lower.indexOf(query);
+    if (idx === -1) continue;
+    const frag = document.createDocumentFragment();
+    let cursor = 0;
+    while (idx !== -1) {
+      if (idx > cursor) frag.appendChild(document.createTextNode(text.slice(cursor, idx)));
+      const mark = document.createElement('mark');
+      mark.className = 'find-hit';
+      mark.textContent = text.slice(idx, idx + query.length);
+      frag.appendChild(mark);
+      cursor = idx + query.length;
+      idx = lower.indexOf(query, cursor);
+    }
+    if (cursor < text.length) frag.appendChild(document.createTextNode(text.slice(cursor)));
+    node.parentNode.replaceChild(frag, node);
+  }
+}
+function navigateFind(dir) {
+  if (findState.hits.length === 0) return;
+  findState.hits.forEach(h => h.classList.remove('current'));
+  findState.index = (findState.index + dir + findState.hits.length) % findState.hits.length;
+  const current = findState.hits[findState.index];
+  current.classList.add('current');
+  current.scrollIntoView({ block: 'center', behavior: 'smooth' });
+  $('#findCount').textContent = `${findState.index + 1}/${findState.hits.length}`;
+}
+
+/* ============ Chat menu ============ */
+function toggleChatMenu(force) {
+  const m = $('#chatMenu');
+  const shouldOpen = force !== undefined ? force : m.classList.contains('hidden');
+  m.classList.toggle('hidden', !shouldOpen);
+}
+
+function handleMenuAction(action) {
+  toggleChatMenu(false);
+  const conv = activeConv();
+  if (!conv) { toast({ title: 'Tidak ada percakapan', message: 'Pilih atau buat percakapan dulu.', type: 'error' }); return; }
+  if (action === 'rename') {
+    // find the chat item in sidebar and trigger rename
+    const item = document.querySelector(`.chat-item.active`);
+    if (item) startRenameInline(item, conv);
+  } else if (action === 'export-md') exportConversation('md');
+  else if (action === 'export-json') exportConversation('json');
+  else if (action === 'copy-all') copyAllMessages();
+  else if (action === 'clear') clearConversationMessages();
 }
 
 /* ============ Settings modal ============ */
@@ -879,13 +1183,33 @@ function wire() {
   });
 
   const input = $('#input');
-  input.addEventListener('input', () => autoresize(input));
+  input.addEventListener('input', () => { autoresize(input); saveDraft(); updateTokenBar(); });
   input.addEventListener('keydown', (e) => {
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); }
   });
   $('#sendBtn').addEventListener('click', () => {
     if (state.streaming) stopStreaming();
     else sendMessage();
+  });
+
+  // Chat menu
+  $('#chatMenuBtn').addEventListener('click', (e) => { e.stopPropagation(); toggleChatMenu(); });
+  $('#chatMenu').querySelectorAll('.menu-item').forEach(item => {
+    item.addEventListener('click', () => handleMenuAction(item.dataset.action));
+  });
+  document.addEventListener('click', (e) => {
+    if (!e.target.closest('.menu-wrap')) toggleChatMenu(false);
+  });
+
+  // Find bar
+  $('#findInChatBtn').addEventListener('click', openFindBar);
+  $('#findClose').addEventListener('click', closeFindBar);
+  $('#findPrev').addEventListener('click', () => navigateFind(-1));
+  $('#findNext').addEventListener('click', () => navigateFind(1));
+  $('#findInput').addEventListener('input', (e) => runFind(e.target.value));
+  $('#findInput').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') { e.preventDefault(); navigateFind(e.shiftKey ? -1 : 1); }
+    else if (e.key === 'Escape') { e.preventDefault(); closeFindBar(); }
   });
 
   // Scroll-to-bottom pill
@@ -904,7 +1228,11 @@ function wire() {
     else if (ctrl && e.key.toLowerCase() === 'k') { e.preventDefault(); openModelDropdown(); }
     else if (ctrl && e.key === ',') { e.preventDefault(); openSettings(); }
     else if (ctrl && e.key.toLowerCase() === 'l') { e.preventDefault(); $('#chatSearch').focus(); }
-    else if (e.key === 'Escape' && state.streaming) { e.preventDefault(); stopStreaming(); }
+    else if (ctrl && e.key.toLowerCase() === 'f') { e.preventDefault(); openFindBar(); }
+    else if (e.key === 'Escape') {
+      if (!$('#findBar').classList.contains('hidden')) { e.preventDefault(); closeFindBar(); }
+      else if (state.streaming) { e.preventDefault(); stopStreaming(); }
+    }
   });
 
   window.api.onChatDelta(handleDelta);
@@ -915,6 +1243,8 @@ function wire() {
 wire();
 loadAll().then(() => {
   updateSendButton();
+  loadDraft();
+  updateTokenBar();
   if (state.settings.apiKey) {
     refreshModels();
   } else {

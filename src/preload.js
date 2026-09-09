@@ -8,6 +8,7 @@ contextBridge.exposeInMainWorld('api', {
   listModels: () => ipcRenderer.invoke('openrouter:models'),
   sendChat: (payload) => ipcRenderer.send('openrouter:chat', payload),
   abortChat: (id) => ipcRenderer.send('openrouter:abort', id),
+  saveExport: (payload) => ipcRenderer.invoke('export:save', payload),
   onChatDelta: (cb) => ipcRenderer.on('openrouter:chat:delta', (_e, data) => cb(data)),
   onChatDone: (cb) => ipcRenderer.on('openrouter:chat:done', (_e, data) => cb(data)),
   onChatError: (cb) => ipcRenderer.on('openrouter:chat:error', (_e, data) => cb(data))
