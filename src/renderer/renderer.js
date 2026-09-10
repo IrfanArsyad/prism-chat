@@ -365,21 +365,22 @@ function initials(id) {
 }
 
 /* ============ Toasts ============ */
-function toast({ title, message, type = 'info', duration = 3200 }) {
+function toast({ title, message, type = 'info', duration = 2600 }) {
   const el = document.createElement('div');
   el.className = `toast ${type}`;
+  const iconName = type === 'success' ? 'check' : type === 'error' ? 'x' : 'info';
+  const text = title 
+    ? (message ? `<strong>${escapeHtml(title)}:</strong> <span>${escapeHtml(message)}</span>` : `<strong>${escapeHtml(title)}</strong>`)
+    : `<span>${escapeHtml(message)}</span>`;
   el.innerHTML = `
-    <div class="toast-icon">${ICONS[type === 'success' ? 'check' : type === 'error' ? 'x' : 'info']}</div>
-    <div class="toast-body">
-      ${title ? `<strong>${escapeHtml(title)}</strong>` : ''}
-      <span>${escapeHtml(message)}</span>
-    </div>
+    <div class="toast-icon">${ICONS[iconName]}</div>
+    <div class="toast-body">${text}</div>
   `;
   $('#toastRoot').appendChild(el);
   setTimeout(() => {
     el.style.opacity = '0';
-    el.style.transform = 'translateY(6px)';
-    setTimeout(() => el.remove(), 220);
+    el.style.transform = 'translateY(4px) scale(0.96)';
+    setTimeout(() => el.remove(), 180);
   }, duration);
 }
 
