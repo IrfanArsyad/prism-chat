@@ -26,6 +26,7 @@ const ICONS = {
   info: '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg>',
   check: '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>',
   x: '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg>',
+  file: '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/></svg>',
   prism: '<svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.6 20.4 18.4H3.6L12 3.6Z" fill="rgba(18,183,106,0.14)" stroke="currentColor" stroke-width="1.6"/><path d="M12 3.6v14.8" stroke="rgba(18,183,106,0.5)" stroke-width="1.2"/><circle cx="12" cy="12.3" r="1.8" fill="currentColor"/></svg>',
   starOutline: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="m12 2 3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2Z"/></svg>',
   starFilled: '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="1" stroke-linejoin="round"><path d="m12 2 3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2Z"/></svg>',
@@ -708,8 +709,25 @@ function appendMessage(msg, scroll = true) {
   const bubble = el.querySelector('.bubble');
   let bodyHtml = '';
   if (msg.images && msg.images.length) {
-    const imgsHtml = `<div class="msg-images-grid">${msg.images.map(img => `<div class="msg-img-wrap"><img src="${img.dataUrl}" alt="${escapeHtml(img.name || 'image')}" class="msg-img-preview" /></div>`).join('')}</div>`;
-    bodyHtml = imgsHtml + (msg.content ? renderMarkdown(msg.content) : '');
+    const imgAtts = msg.images.filter(a => a.type === 'image' || a.dataUrl);
+    const fileAtts = msg.images.filter(a => a.type === 'file' || (!a.dataUrl && a.content));
+
+    let imgsHtml = '';
+    if (imgAtts.length) {
+      imgsHtml = `<div class="msg-images-grid">${imgAtts.map(img => `<div class="msg-img-wrap"><img src="${img.dataUrl}" alt="${escapeHtml(img.name || 'image')}" class="msg-img-preview" /></div>`).join('')}</div>`;
+    }
+
+    let filesHtml = '';
+    if (fileAtts.length) {
+      filesHtml = `<div class="msg-files-grid">${fileAtts.map(f => `
+        <div class="msg-file-chip">
+          <div class="msg-file-icon">${ICONS.file}</div>
+          <span class="msg-file-name" title="${escapeHtml(f.name)}">${escapeHtml(f.name)}</span>
+        </div>
+      `).join('')}</div>`;
+    }
+
+    bodyHtml = imgsHtml + filesHtml + (msg.content ? renderMarkdown(msg.content) : '');
   } else {
     bodyHtml = renderMarkdown(msg.content || '');
   }
@@ -827,12 +845,29 @@ function triggerAssistant() {
   for (const m of conv.messages) {
     if (m === asstMsg) continue;
     if (m.images && m.images.length) {
-      const parts = [];
-      if (m.content) parts.push({ type: 'text', text: m.content });
-      m.images.forEach(img => {
-        parts.push({ type: 'image_url', image_url: { url: img.dataUrl } });
-      });
-      messagesForApi.push({ role: m.role, content: parts });
+      const imgAtts = m.images.filter(a => a.type === 'image' || a.dataUrl);
+      const fileAtts = m.images.filter(a => a.type === 'file' || (!a.dataUrl && a.content));
+
+      let extraText = '';
+      if (fileAtts.length > 0) {
+        fileAtts.forEach(f => {
+          const ext = (f.name.split('.').pop() || '').toLowerCase();
+          extraText += `\n\n[Lampiran Berkas: ${f.name}]\n\`\`\`${ext}\n${f.content}\n\`\`\``;
+        });
+      }
+
+      const fullText = (m.content || '') + extraText;
+
+      if (imgAtts.length > 0) {
+        const parts = [];
+        if (fullText) parts.push({ type: 'text', text: fullText });
+        imgAtts.forEach(img => {
+          parts.push({ type: 'image_url', image_url: { url: img.dataUrl } });
+        });
+        messagesForApi.push({ role: m.role, content: parts });
+      } else {
+        messagesForApi.push({ role: m.role, content: fullText });
+      }
     } else {
       messagesForApi.push({ role: m.role, content: m.content || '' });
     }
@@ -1155,13 +1190,19 @@ function renderAttachmentsBar() {
     return;
   }
   bar.classList.remove('hidden');
-  bar.innerHTML = state.pendingAttachments.map(att => `
-    <div class="attachment-chip" data-id="${att.id}">
-      <img src="${att.dataUrl}" alt="${escapeHtml(att.name)}" class="attachment-thumb" />
-      <span class="attachment-name">${escapeHtml(att.name)}</span>
-      <button class="attachment-remove" type="button" data-remove="${att.id}">${ICONS.x}</button>
-    </div>
-  `).join('');
+  bar.innerHTML = state.pendingAttachments.map(att => {
+    const isImage = att.type === 'image' || att.dataUrl;
+    const iconOrThumb = isImage
+      ? `<img src="${att.dataUrl}" alt="${escapeHtml(att.name)}" class="attachment-thumb" />`
+      : `<div class="attachment-file-icon">${ICONS.file}</div>`;
+    return `
+      <div class="attachment-chip" data-id="${att.id}">
+        ${iconOrThumb}
+        <span class="attachment-name">${escapeHtml(att.name)}</span>
+        <button class="attachment-remove" type="button" data-remove="${att.id}">${ICONS.x}</button>
+      </div>
+    `;
+  }).join('');
 
   bar.querySelectorAll('.attachment-remove').forEach(btn => {
     btn.addEventListener('click', (e) => {
@@ -1256,7 +1297,6 @@ async function handlePasteEvent(e) {
 
 function readAndAttachFiles(files) {
   if (!files || !files.length) return;
-  const input = $('#input');
   const fileArray = Array.from(files);
 
   fileArray.forEach(file => {
@@ -1270,18 +1310,16 @@ function readAndAttachFiles(files) {
       const reader = new FileReader();
       reader.onload = (e) => {
         const content = e.target.result;
-        const ext = file.name.split('.').pop().toLowerCase();
-        const codeBlock = `\n\n\`\`\`${ext}\n// File: ${file.name}\n${content}\n\`\`\`\n`;
-
-        if (input.value && input.value.trim()) {
-          input.value += codeBlock;
-        } else {
-          input.value = `Berikut adalah berkas \`${file.name}\`:\n${codeBlock}`;
-        }
-        autoresize(input);
-        saveDraft();
-        toast({ title: 'Berkas Dilampirkan', message: `${file.name} dimasukkan ke composer.`, type: 'success' });
-        input.focus();
+        if (state.pendingAttachments.some(a => a.name === file.name && a.content === content)) return;
+        const att = {
+          id: uid(),
+          type: 'file',
+          name: file.name,
+          content: content
+        };
+        state.pendingAttachments.push(att);
+        renderAttachmentsBar();
+        toast({ title: 'Dokumen Dilampirkan', message: `${file.name} berhasil dilampirkan.`, type: 'success' });
       };
       reader.readAsText(file);
     }
